@@ -112,6 +112,12 @@ describe('modelReasoningSelection', () => {
     expect(modelReasoningSelection({ ...saved, requested: '' }).effectiveEffort).toBe('high')
     expect(modelReasoningSelection({ ...saved, requested: 'xhigh' }).effectiveEffort).toBe('xhigh')
     expect(modelReasoningSelection({ ...saved, model: 'gemini-4-neon', requested: '' }).effectiveEffort).toBe('')
+    // The picker names no level of its own; the id does. Nothing the user asked
+    // for is unsupported, so a model change keeps the effort instead of clearing
+    // it, while the value shown is still the level the id runs.
+    const named = modelReasoningSelection({ ...saved, requested: '' })
+    expect(named.effectiveEffort).toBe('high')
+    expect(named.supported).toBeTrue()
   })
 
   test('preserves effort when a ready catalog still marks the model pending', () => {

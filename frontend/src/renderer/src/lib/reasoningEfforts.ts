@@ -87,13 +87,15 @@ export function modelReasoningSelection({
   // A saved Antigravity id such as gemini-4-neon-high names the level it runs at.
   const named = suggestion.reasoning.efforts?.find((level) => model === `${suggestion.value}-${level}`)
   const wanted = effort || named || ''
-  const supported = supportedReasoningEffort(wanted, options)
+  // A level this model cannot run gives way to the level it recommends, and
+  // failing that to following its own default, never to a level it lacks.
+  const usable = supportedReasoningEffort(wanted, options)
   return {
     options,
-    // A level this model cannot run gives way to the level it recommends, and
-    // failing that to following its own default, never to a level it lacks.
-    effectiveEffort: supported ? wanted : suggestion.reasoning.default_effort ?? '',
-    supported: supportedReasoningEffort(effort, options),
+    effectiveEffort: usable ? wanted : suggestion.reasoning.default_effort ?? '',
+    // The request names no level, so the model's own level stands in and there
+    // is nothing to report as unsupported even when it had to give way.
+    supported: usable || effort === '',
     status: 'ready',
     blocked: false,
   }

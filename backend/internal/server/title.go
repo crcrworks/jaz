@@ -94,14 +94,14 @@ func (s *Server) generateAndSaveSessionTitle(ctx context.Context, session storag
 
 func (s *Server) generateSessionTitle(ctx context.Context, session storage.Session, message string) (string, error) {
 	text, err := s.ACP.RunUtilityPrompt(ctx, acp.UtilityPromptRequest{
-		SessionID:       session.ID,
-		ACPAgent:        sessionACPAgent(session),
-		Directory:       sessionDirectory(session),
-		Message:         titlePrompt(message),
-		ModelProvider:   session.ModelProvider,
-		Model:           session.Model,
-		ReasoningEffort: "none",
-		Timeout:         titleGenerationTimeout,
+		SessionID:         session.ID,
+		ACPAgent:          sessionACPAgent(session),
+		Directory:         sessionDirectory(session),
+		Message:           titlePrompt(message),
+		ModelProvider:     session.ModelProvider,
+		Model:             session.Model,
+		NoReasoningEffort: true,
+		Timeout:           titleGenerationTimeout,
 	})
 	if err != nil {
 		return "", err

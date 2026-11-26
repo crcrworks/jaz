@@ -160,6 +160,10 @@ type SpawnRequest struct {
 	// ReasoningEffort overrides the agent's configured reasoning effort for this
 	// session (empty keeps the agent default).
 	ReasoningEffort string
+	// NoReasoningEffort asks for no reasoning at all, which is not the "none"
+	// level an agent may advertise: it carries no effort rather than choosing
+	// one, so it never reaches the agent's effort validation.
+	NoReasoningEffort bool
 	// SourceType/SourceID tag sessions created by backend automation such as loops.
 	SourceType      string
 	SourceID        string

@@ -20,7 +20,11 @@ type UtilityPromptRequest struct {
 	ModelProvider   string
 	Model           string
 	ReasoningEffort string
-	Timeout         time.Duration
+	// NoReasoningEffort asks the agent to reason not at all, as titling does so a
+	// title never inherits the thread's effort. It is not the "none" level an
+	// agent may advertise: the request carries no effort rather than choosing one.
+	NoReasoningEffort bool
+	Timeout           time.Duration
 }
 
 func (m *Manager) RunUtilityPrompt(ctx context.Context, req UtilityPromptRequest) (string, error) {
@@ -33,12 +37,13 @@ func (m *Manager) RunUtilityPrompt(ctx context.Context, req UtilityPromptRequest
 		return "", fmt.Errorf("message is required")
 	}
 	spawnReq, cfg, _, err := m.spawnConfig(SpawnRequest{
-		ACPAgent:        req.ACPAgent,
-		Directory:       req.Directory,
-		ModelProvider:   req.ModelProvider,
-		Model:           req.Model,
-		StoredModel:     true,
-		ReasoningEffort: req.ReasoningEffort,
+		ACPAgent:          req.ACPAgent,
+		Directory:         req.Directory,
+		ModelProvider:     req.ModelProvider,
+		Model:             req.Model,
+		StoredModel:       true,
+		ReasoningEffort:   req.ReasoningEffort,
+		NoReasoningEffort: req.NoReasoningEffort,
 	})
 	if err != nil {
 		return "", err
