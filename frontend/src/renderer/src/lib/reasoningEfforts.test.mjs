@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { filterModelSuggestions, modelSuggestionLabel } from './modelSuggestion'
-import { modelReasoningSelection } from './reasoningEfforts'
+import { modelReasoningSelection, withConfiguredEffort } from './reasoningEfforts'
 
 const input = {
   settings: undefined,
@@ -175,5 +175,20 @@ describe('modelReasoningSelection', () => {
 
     expect(modelReasoningSelection({ ...input, settings: openCodeSettings, agent: 'opencode', catalog, requested: 'none' }).effectiveEffort).toBe('none')
     expect(modelReasoningSelection({ ...input, settings: openCodeSettings, agent: 'opencode', catalog, requested: '' }).effectiveEffort).toBe('')
+  })
+})
+
+describe('withConfiguredEffort', () => {
+  test('keeps a saved effort the current model does not list', () => {
+    expect(withConfiguredEffort('none', [{ value: '', label: 'Default' }])).toEqual([
+      { value: '', label: 'Default' },
+      { value: 'none', label: 'None' },
+    ])
+  })
+
+  test('leaves a list that already names the effort alone', () => {
+    const options = [{ value: '', label: 'Default' }, { value: 'none', label: 'None' }]
+    expect(withConfiguredEffort('none', options)).toBe(options)
+    expect(withConfiguredEffort('', options)).toBe(options)
   })
 })

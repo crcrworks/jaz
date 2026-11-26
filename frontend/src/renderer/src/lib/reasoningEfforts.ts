@@ -106,6 +106,18 @@ export function supportedReasoningEffort(value: string, options: ReasoningEffort
   return effort === '' || effort === 'none' || options.some((option) => option.value === effort)
 }
 
+// withConfiguredEffort keeps a saved effort on the list when the current model
+// does not name it, so a picker shows the level a turn actually asks for
+// instead of falling back to another row and hiding the difference.
+export function withConfiguredEffort(
+  effort: string,
+  options: ReasoningEffortOption[],
+): ReasoningEffortOption[] {
+  const value = effort.trim()
+  if (value === '' || options.some((option) => option.value === value)) return options
+  return [...options, { value, label: reasoningEffortLabel(value, options) }]
+}
+
 function reasoningOptions(suggestion: ModelSuggestion): ReasoningEffortOption[] {
   const values = suggestion.reasoning.efforts ?? []
   if (values.length === 0) return []
