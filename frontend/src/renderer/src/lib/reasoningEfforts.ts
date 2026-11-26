@@ -41,23 +41,6 @@ export function reasoningEffortLabel(
   return options.find((option) => option.value === effort)?.label ?? REASONING_LABELS[effort] ?? (effort || 'Default')
 }
 
-// Settings screens treat '' as "no effort configured" (shown as "None") rather
-// than "inherit the default".
-function settingsReasoningOptions(options: ReasoningEffortOption[]): ReasoningEffortOption[] {
-  return dedupeReasoningOptions(options)
-    .filter((option) => option.value !== 'none')
-    .map((option) => (option.value === '' ? { ...option, label: 'None' } : option))
-}
-
-export function modelReasoningEffortOptions(
-  settings: AgentSettings | undefined,
-  agent: string,
-  model: string,
-  suggestions: ModelSuggestion[],
-): ReasoningEffortOption[] {
-  return reasoningOptions(settings, agent, model, suggestions, false)
-}
-
 export interface ModelReasoningSelection {
   options: ReasoningEffortOption[]
   effectiveEffort: string
@@ -68,57 +51,48 @@ export interface ModelReasoningSelection {
 
 export type ModelReasoningCatalog =
   | { status: 'pending' | 'error' }
-  | {
-      status: 'ready'
-      suggestions: ModelSuggestion[]
-      unknownModel: 'ready' | 'unavailable'
-    }
+  | { status: 'ready'; suggestions: ModelSuggestion[] }
 
+// modelReasoningSelection answers what to offer for a model and what effort the
+// turn will actually use. Only a model the catalog describes in full narrows the
+// agent's own levels: anything unknown keeps the configured effort and the
+// agent's options, so a missing catalog never silently drops a saved choice.
 export function modelReasoningSelection({
   settings,
   agent,
   model,
   requested,
-  settingsMode,
   catalog,
 }: {
   settings: AgentSettings | undefined
   agent: string
   model: string
   requested: string
-  settingsMode: boolean
   catalog: ModelReasoningCatalog
 }): ModelReasoningSelection {
   const effort = requested.trim()
+  const agentOptions = acpReasoningEffortOptions(settings, agent)
   if (catalog.status !== 'ready') {
-    return {
-      options: [],
-      effectiveEffort: effort,
-      supported: true,
-      status: catalog.status,
-      blocked: effort !== '',
-    }
+    return { options: agentOptions, effectiveEffort: effort, supported: true, status: catalog.status, blocked: effort !== '' }
   }
   const suggestion = modelSuggestionFor(catalog.suggestions, model)
-  const capabilityStatus = suggestion?.reasoning.status ?? catalog.unknownModel
-  if (capabilityStatus === 'pending') {
-    return { options: [], effectiveEffort: effort, supported: true, status: 'pending', blocked: effort !== '' }
+  if (suggestion?.reasoning.status === 'pending') {
+    return { options: agentOptions, effectiveEffort: effort, supported: true, status: 'pending', blocked: effort !== '' }
   }
-  if (capabilityStatus === 'unavailable') {
-    return {
-      options: [],
-      effectiveEffort: 'none',
-      supported: supportedReasoningEffort(effort, []),
-      status: 'ready',
-      blocked: false,
-    }
+  if (!suggestion || suggestion.reasoning.status !== 'ready') {
+    return { options: agentOptions, effectiveEffort: effort, supported: true, status: 'ready', blocked: false }
   }
-  const options = reasoningOptions(settings, agent, model, catalog.suggestions, settingsMode)
+  // A model that reasons on its own has no level to choose.
+  const options = suggestion.reasoning.automatic ? [] : reasoningOptions(suggestion)
   // A saved Antigravity id such as gemini-4-neon-high names the level it runs at.
-  const named = suggestion?.reasoning.efforts?.find((level) => model === `${suggestion.value}-${level}`)
+  const named = suggestion.reasoning.efforts?.find((level) => model === `${suggestion.value}-${level}`)
+  const wanted = effort || named || ''
+  const supported = supportedReasoningEffort(wanted, options)
   return {
     options,
-    effectiveEffort: effectiveReasoningEffort(effort || named || '', options),
+    // A level this model cannot run gives way to the level it recommends, and
+    // failing that to following its own default, never to a level it lacks.
+    effectiveEffort: supported ? wanted : suggestion.reasoning.default_effort ?? '',
     supported: supportedReasoningEffort(effort, options),
     status: 'ready',
     blocked: false,
@@ -127,54 +101,16 @@ export function modelReasoningSelection({
 
 export function supportedReasoningEffort(value: string, options: ReasoningEffortOption[]): boolean {
   const effort = value.trim()
-  // `none` clears Jaz's inherited session effort; it is valid even when the
-  // provider does not advertise a user-selectable "none" level.
-  return (
-    effort === '' || effort === 'none' || options.some((option) => option.value === effort)
-  )
+  // `none` clears Jaz's inherited session effort; an agent that advertises the
+  // level turns its thinking off with it instead.
+  return effort === '' || effort === 'none' || options.some((option) => option.value === effort)
 }
 
-export function effectiveReasoningEffort(
-  requested: string,
-  options: ReasoningEffortOption[],
-): string {
-  const effort = requested.trim()
-  return supportedReasoningEffort(effort, options) ? effort : 'none'
-}
-
-function reasoningOptions(
-  settings: AgentSettings | undefined,
-  agent: string,
-  model: string,
-  suggestions: ModelSuggestion[],
-  settingsMode: boolean,
-): ReasoningEffortOption[] {
-  const suggestion = modelSuggestionFor(suggestions, model)
-  if (!suggestion) {
-    const agentOptions = acpReasoningEffortOptions(settings, agent)
-    return settingsMode ? settingsReasoningOptions(agentOptions) : agentOptions
-  }
-  if (suggestion.reasoning.status !== 'ready') return []
+function reasoningOptions(suggestion: ModelSuggestion): ReasoningEffortOption[] {
   const values = suggestion.reasoning.efforts ?? []
   if (values.length === 0) return []
-  const options = [
-    { value: '', label: settingsMode ? 'None' : 'Default' },
-    ...values.filter((value) => !settingsMode || value !== 'none').map(reasoningOption),
+  return [
+    { value: '', label: 'Default' },
+    ...values.map((value): ReasoningEffortOption => ({ value, label: REASONING_LABELS[value] ?? value })),
   ]
-  return settingsMode ? settingsReasoningOptions(options) : dedupeReasoningOptions(options)
-}
-
-function reasoningOption(value: string): ReasoningEffortOption {
-  return { value, label: REASONING_LABELS[value] ?? value }
-}
-
-function dedupeReasoningOptions(options: ReasoningEffortOption[]): ReasoningEffortOption[] {
-  const seen = new Set<string>()
-  const out: ReasoningEffortOption[] = []
-  for (const option of options) {
-    if (seen.has(option.value)) continue
-    seen.add(option.value)
-    out.push(option)
-  }
-  return out
 }

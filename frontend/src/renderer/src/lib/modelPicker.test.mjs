@@ -3,9 +3,9 @@ import { pickerEffortOptions, parseModelSelections } from './modelPicker'
 
 const options = (values) => values.map((value) => ({ value, label: value }))
 
-test('picker exposes only five efforts in order without changing provider IDs', () => {
+test('picker exposes only the effort stops it offers without changing provider IDs', () => {
   const available = options(['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultracode'])
-  expect(pickerEffortOptions(available).map(({ value }) => value)).toEqual(['low', 'medium', 'high', 'xhigh', 'ultracode'])
+  expect(pickerEffortOptions(available).map(({ value }) => value)).toEqual(['none', 'low', 'medium', 'high', 'xhigh', 'ultracode'])
   expect(available).toHaveLength(9)
   expect(pickerEffortOptions(options(['ultra', 'max', 'xhigh', 'high', 'medium', 'low']))).toEqual([
     { value: 'low', label: 'low' },
@@ -19,6 +19,9 @@ test('picker exposes only five efforts in order without changing provider IDs', 
 
 test('picker only offers efforts the selected model supports, with Max on top where there is no xhigh', () => {
   expect(pickerEffortOptions(options(['max', 'high', 'low'])).map(({ value }) => value)).toEqual(['low', 'high', 'max'])
+  expect(pickerEffortOptions(options(['none', 'high'])).map(({ value }) => value)).toEqual(['none', 'high'])
+  // "None" turns thinking off, so it needs a level beside it to turn off.
+  expect(pickerEffortOptions(options(['none']))).toEqual([])
   expect(pickerEffortOptions([])).toEqual([])
 })
 

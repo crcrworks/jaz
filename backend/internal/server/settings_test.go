@@ -294,6 +294,7 @@ func TestAgentSettingsAPIControlsEnabledACPAgents(t *testing.T) {
 	if !hasReasoningEffort(got.ACPOptions["claude"].ReasoningEfforts, "ultracode") ||
 		!hasReasoningEffort(got.ACPOptions["codex"].ReasoningEfforts, "max") ||
 		!hasReasoningEffort(got.ACPOptions["codex"].ReasoningEfforts, "ultra") ||
+		!hasReasoningEffort(got.ACPOptions["opencode"].ReasoningEfforts, "none") ||
 		len(got.ACPOptions["kimi"].ReasoningEfforts) != 0 ||
 		hasReasoningEffort(got.ACPOptions["codex"].ReasoningEfforts, "ultracode") {
 		t.Fatalf("unexpected acp options %#v", got.ACPOptions)

@@ -107,7 +107,10 @@ var codexReasoningEffortOptions = append(append([]ReasoningEffortOption(nil), ba
 	ReasoningEffortOption{Value: "ultra", Label: "Ultra"},
 )
 
+// OpenCode's ACP names "none" among a model's thinking levels, so Jaz keeps it
+// as a level of its own instead of clearing the effort as it does elsewhere.
 var openCodeReasoningEffortOptions = append(append([]ReasoningEffortOption(nil), baseReasoningEffortOptions...),
+	ReasoningEffortOption{Value: "none", Label: "None"},
 	ReasoningEffortOption{Value: "max", Label: "Max"},
 )
 

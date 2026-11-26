@@ -31,14 +31,12 @@ export function useModelReasoningState({
   model,
   reasoningEffort,
   provider,
-  settingsMode = false,
 }: {
   settings: AgentSettings | undefined
   agent: string
   model: string
   reasoningEffort: string
   provider: string | undefined
-  settingsMode?: boolean
 }): ModelReasoningState {
   const usesProvider = acpUsesModelProvider(settings, agent)
   const enabled = acpAgentModelsReady(settings, agent, provider)
@@ -51,14 +49,13 @@ export function useModelReasoningState({
   const modelSuggestions = ready ? query.data.models : []
   const defaultModel = ready ? query.data.defaultModel : undefined
   const catalog: ModelReasoningCatalog = ready && modelSuggestions.length > 0
-    ? { status: 'ready', suggestions: modelSuggestions, unknownModel: usesProvider ? 'unavailable' : 'ready' }
+    ? { status: 'ready', suggestions: modelSuggestions }
     : { status: query.isError || ready ? 'error' : 'pending' }
   const reasoningForModel = (nextModel: string, effort: string) => modelReasoningSelection({
     settings,
     agent,
     model: nextModel || defaultModel || '',
     requested: effort,
-    settingsMode,
     catalog,
   })
   const reasoning = reasoningForModel(model, reasoningEffort)

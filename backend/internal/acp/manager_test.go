@@ -1382,6 +1382,55 @@ func TestManagerUsesOpenCodeLaunchModel(t *testing.T) {
 	}
 }
 
+// OpenCode advertises "none" as a thinking level, so a thread that asks for
+// thinking off must reach its session config as none rather than default.
+func TestManagerSendsOpenCodeThinkingOff(t *testing.T) {
+	store, err := jsonstore.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := `[` +
+		`{"id":"model","category":"model","type":"select","currentValue":"openrouter/z-ai/glm-5.2","options":[{"value":"openrouter/z-ai/glm-5.2"}]},` +
+		`{"id":"effort","name":"Effort","category":"thought_level","type":"select","currentValue":"default","options":[{"value":"none"},{"value":"high"},{"value":"xhigh"},{"value":"default"}]}` +
+		`]`
+	manager := acp.NewManager(store, acp.Config{
+		Root:      t.TempDir(),
+		Workspace: t.TempDir(),
+		Agents: map[string]acp.AgentConfig{
+			acp.AgentOpenCode: {
+				Command:         os.Args[0],
+				Args:            []string{"-test.run=TestFakeACPAgentProcess"},
+				ProviderMode:    acp.AgentProviderModeAgentDefaults,
+				ModelProvider:   provider.ProviderOpenRouter,
+				Model:           "z-ai/glm-5.2",
+				ReasoningEffort: "none",
+				Env: map[string]string{
+					"JAZ_FAKE_ACP_AGENT":            "1",
+					"JAZ_FAKE_ACP_SET_CONFIG":       "1",
+					"JAZ_FAKE_ACP_SESSION_OPTIONS":  options,
+					"JAZ_FAKE_ACP_EXPECT_CONFIG_ID": "effort",
+					"JAZ_FAKE_ACP_EXPECT_EFFORT":    "none",
+				},
+			},
+		},
+	}, log.New(io.Discard))
+	t.Cleanup(manager.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	spawned, err := manager.Spawn(ctx, acp.SpawnRequest{ACPAgent: acp.AgentOpenCode, Slug: "opencode-thinking-off"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := store.LoadSession(spawned.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.ReasoningEffort != "none" {
+		t.Fatalf("stored effort = %q, want none", session.ReasoningEffort)
+	}
+}
+
 func TestManagerUsesAdvertisedThoughtLevelConfigOption(t *testing.T) {
 	store, err := jsonstore.New(t.TempDir())
 	if err != nil {

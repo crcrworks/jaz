@@ -275,7 +275,6 @@ function ACPAgentRow({
     model: reasoningModel,
     reasoningEffort,
     provider: current.model_provider,
-    settingsMode: true,
   })
   const update = useCallback((next: Partial<typeof current>) => {
     const value = { ...current, ...next }
@@ -429,7 +428,7 @@ function ACPAgentRow({
           />
         </SettingsRow>
 
-        {/* Show only when the model has an effort to choose beyond "None". */}
+        {/* Show only when there is an effort to choose beyond the model default. */}
         {reasoningOptions.some((option) => option.value !== '') ? (
           <SettingsRow title="Reasoning" description="Reasoning effort copied into new threads.">
             <Select
