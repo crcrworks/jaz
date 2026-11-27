@@ -40,6 +40,9 @@ func (m *Manager) DiscoverModels(ctx context.Context, agent string) (AgentModelC
 	if agent == AgentCopilot {
 		return copilotModels(ctx, m.probeEnv(agent, cfg))
 	}
+	if agent == AgentDevin {
+		return m.devinModels(ctx, cfg)
+	}
 	if agent == AgentMicrosoftCopilot {
 		return AgentModelCatalog{Models: []AgentModel{}}, nil
 	}

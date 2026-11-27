@@ -58,7 +58,7 @@ func AgentDefaultsFromCatalog(catalog acp.AgentCatalog) AgentDefaults {
 func defaultACPAgentEnabled(name string, agent acp.AgentConfig) bool {
 	// Both need a sign-in of their own before they can run, so neither is
 	// enabled by a seed.
-	if name == acp.AgentCopilot || name == acp.AgentPi {
+	if name == acp.AgentCopilot || name == acp.AgentPi || name == acp.AgentDevin {
 		return false
 	}
 	if agent.Local || strings.TrimSpace(agent.URL) != "" {

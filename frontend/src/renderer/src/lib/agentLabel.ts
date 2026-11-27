@@ -10,6 +10,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   opencode: 'OpenCode',
   antigravity: 'Antigravity',
   copilot: 'GitHub Copilot',
+  devin: 'Devin',
   microsoft_copilot: 'Microsoft Copilot Work/School',
   pi: 'Pi',
 }
@@ -37,6 +38,7 @@ const AUTH_PROVIDERS: Record<string, string> = {
   antigravity: 'Google AI',
   muse: 'Meta',
   copilot: 'GitHub',
+  devin: 'Cognition',
   microsoft_copilot: 'Microsoft Work/School',
   pi: 'Pi',
 }
@@ -54,6 +56,7 @@ const ONBOARDING_NAMES: Record<string, string> = {
   kimi: 'Kimi Code',
   antigravity: 'Antigravity',
   muse: 'Muse Code',
+  devin: 'Devin',
   pi: 'Pi',
 }
 

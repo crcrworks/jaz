@@ -130,6 +130,8 @@ func AgentLoginInvocationFor(name, root string, auth AgentAuthConfig, binDir str
 		return museLoginInvocation(probeEnv)
 	case AgentPi:
 		return piLoginInvocation(root)
+	case AgentDevin:
+		return loginInvocation(nil, true, binDir, "devin", "auth", "login")
 	case AgentAntigravity:
 		executable, err := antigravityExecutable(binDir)
 		if err != nil {
