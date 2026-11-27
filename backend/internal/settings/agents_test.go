@@ -292,3 +292,23 @@ func TestNativeDefaultModelKeepsReasoningThroughSettingsSave(t *testing.T) {
 		})
 	}
 }
+
+// OpenCode offers "none" as one of a model's thinking levels, so Settings must
+// save it and keep it apart from an unset effort that follows the model.
+func TestNormalizeAgentDefaultsKeepsOpenCodeThinkingOff(t *testing.T) {
+	input := testAgentDefaultsSeed()
+	opencode := input.ACP["opencode"]
+	opencode.Model = "z-ai/glm-5.2"
+	opencode.ReasoningEffort = "none"
+	input.ACP["opencode"] = opencode
+	service := warmSettingsModelCatalog(t, `{"data":[{"id":"z-ai/glm-5.2","reasoning":{"supported_efforts":["xhigh","high","none"],"default_effort":"high"}}]}`)
+
+	normalized, err := NormalizeAgentDefaults(input, acp.BuiltinAgents(), acp.ModelCapabilities{Catalog: service})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := normalized.ACP["opencode"]
+	if got.ReasoningEffort != "none" || got.Model != "z-ai/glm-5.2" {
+		t.Fatalf("opencode defaults = %#v, want thinking off on glm-5.2", got)
+	}
+}

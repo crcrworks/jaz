@@ -123,6 +123,10 @@ func TestNormalizeAgentReasoningEffort(t *testing.T) {
 		{AgentGrok, "ultracode", "", true},
 		{AgentGrok, "ultra", "", true},
 		{AgentOpenCode, "medium", "medium", false},
+		// OpenCode advertises "none" to turn thinking off, so it stays a level
+		// instead of clearing the effort the way it does for other agents.
+		{AgentOpenCode, "none", "none", false},
+		{AgentCodex, "none", "", false},
 		{AgentOpenCode, "max", "max", false},
 	}
 	for _, tc := range cases {

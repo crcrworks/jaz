@@ -12,6 +12,7 @@ import (
 
 	"github.com/wins/jaz/backend/internal/acp"
 	"github.com/wins/jaz/backend/internal/agent"
+	"github.com/wins/jaz/backend/internal/modelcatalog"
 	"github.com/wins/jaz/backend/internal/provider"
 	"github.com/wins/jaz/backend/internal/storage"
 	jsonstore "github.com/wins/jaz/backend/internal/storage/json"
@@ -240,5 +241,101 @@ func TestUtilityUsageIsRecordedOnSuccessAndFailure(t *testing.T) {
 				t.Fatalf("title usage = %#v", loaded.Usage)
 			}
 		})
+	}
+}
+
+// A utility prompt asks for no reasoning at all so a title never inherits the
+// thread's high effort. It must stay clear of the agent's levels: on OpenCode a
+// "none" level exists, and the model's provider entry need not offer it.
+func TestManagerRunUtilityPromptAsksForNoReasoning(t *testing.T) {
+	store, err := jsonstore.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, model := range []string{"openai/gpt-5.5", "unknown-model"} {
+		t.Run(model, func(t *testing.T) {
+			manager := acp.NewManager(store, acp.Config{
+				Root:         t.TempDir(),
+				Workspace:    t.TempDir(),
+				ModelCatalog: warmedManagerModelCatalog(t),
+				Agents: map[string]acp.AgentConfig{
+					acp.AgentOpenCode: {
+						Command:         os.Args[0],
+						Args:            []string{"-test.run=TestFakeACPAgentProcess"},
+						ProviderMode:    acp.AgentProviderModeAgentDefaults,
+						ModelProvider:   provider.ProviderOpenRouter,
+						Model:           model,
+						ReasoningEffort: "xhigh",
+						Env:             map[string]string{"JAZ_FAKE_ACP_AGENT": "1"},
+					},
+				},
+			}, log.New(io.Discard))
+			t.Cleanup(manager.Close)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			text, err := manager.RunUtilityPrompt(ctx, acp.UtilityPromptRequest{
+				ACPAgent:          acp.AgentOpenCode,
+				ModelProvider:     provider.ProviderOpenRouter,
+				Model:             model,
+				Message:           "return a short title",
+				NoReasoningEffort: true,
+				Timeout:           10 * time.Second,
+			})
+			if err != nil {
+				t.Fatalf("title prompt failed: %v", err)
+			}
+			if text == "" {
+				t.Fatal("title prompt returned nothing")
+			}
+			sessions, err := store.ListSessions(storage.SessionFilter{IncludeChildren: true, IncludeSourced: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(sessions) != 0 {
+				t.Fatalf("sessions = %#v, want no stored thread", sessions)
+			}
+		})
+	}
+}
+
+// A cold provider catalog must not fail a title either: the prompt asks for no
+// effort, so there is nothing to validate against model metadata.
+func TestManagerRunUtilityPromptSurvivesColdCatalog(t *testing.T) {
+	store, err := jsonstore.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := acp.NewManager(store, acp.Config{
+		Root:      t.TempDir(),
+		Workspace: t.TempDir(),
+		ModelCatalog: modelcatalog.NewService(provider.StaticSource(map[string]provider.ModelProviderConfig{
+			provider.ProviderOpenRouter: {BaseURL: "http://127.0.0.1:1"},
+		})),
+		Agents: map[string]acp.AgentConfig{
+			acp.AgentOpenCode: {
+				Command:         os.Args[0],
+				Args:            []string{"-test.run=TestFakeACPAgentProcess"},
+				ProviderMode:    acp.AgentProviderModeAgentDefaults,
+				ModelProvider:   provider.ProviderOpenRouter,
+				Model:           "z-ai/glm-5.2",
+				ReasoningEffort: "xhigh",
+				Env:             map[string]string{"JAZ_FAKE_ACP_AGENT": "1"},
+			},
+		},
+	}, log.New(io.Discard))
+	t.Cleanup(manager.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if _, err := manager.RunUtilityPrompt(ctx, acp.UtilityPromptRequest{
+		ACPAgent:          acp.AgentOpenCode,
+		ModelProvider:     provider.ProviderOpenRouter,
+		Model:             "z-ai/glm-5.2",
+		Message:           "return a short title",
+		NoReasoningEffort: true,
+		Timeout:           10 * time.Second,
+	}); err != nil {
+		t.Fatalf("title prompt failed with a cold catalog: %v", err)
 	}
 }

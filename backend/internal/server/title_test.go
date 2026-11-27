@@ -40,8 +40,11 @@ func TestBeginACPTurnGeneratesTitleFromFirstMessage(t *testing.T) {
 	if manager.utilityPrompt.ACPAgent != acp.AgentCodex {
 		t.Fatalf("utility prompt request = %#v", manager.utilityPrompt)
 	}
-	if manager.utilityPrompt.ReasoningEffort != "none" {
-		t.Fatalf("utility prompt reasoning effort = %q, want none", manager.utilityPrompt.ReasoningEffort)
+	// Titling asks for no reasoning so a title never inherits the thread's effort,
+	// which is not the same as choosing an agent's "none" level.
+	if !manager.utilityPrompt.NoReasoningEffort || manager.utilityPrompt.ReasoningEffort != "" {
+		t.Fatalf("utility prompt reasoning = %q (no effort %v), want no reasoning at all",
+			manager.utilityPrompt.ReasoningEffort, manager.utilityPrompt.NoReasoningEffort)
 	}
 	// Titling spawns an agent; inheriting the 30s server-action budget strands
 	// the thread on its placeholder title for good.

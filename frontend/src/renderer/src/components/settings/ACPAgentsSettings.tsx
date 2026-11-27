@@ -41,6 +41,7 @@ import type {
 import { useACPLoginPolling } from '@/lib/hooks/useACPLoginPolling'
 import { useModelReasoningState } from '@/lib/modelReasoning'
 import { keys } from '@/lib/query/keys'
+import { withConfiguredEffort } from '@/lib/reasoningEfforts'
 
 const rowControlClass = 'w-full md:w-[320px]'
 type ACPAuthDraft = AgentSettingsData['acp'][string]['auth']
@@ -275,7 +276,6 @@ function ACPAgentRow({
     model: reasoningModel,
     reasoningEffort,
     provider: current.model_provider,
-    settingsMode: true,
   })
   const update = useCallback((next: Partial<typeof current>) => {
     const value = { ...current, ...next }
@@ -429,12 +429,12 @@ function ACPAgentRow({
           />
         </SettingsRow>
 
-        {/* Show only when the model has an effort to choose beyond "None". */}
-        {reasoningOptions.some((option) => option.value !== '') ? (
+        {/* Show only when there is an effort to choose beyond the model default. */}
+        {reasoningOptions.some((option) => option.value !== '') || reasoningEffort ? (
           <SettingsRow title="Reasoning" description="Reasoning effort copied into new threads.">
             <Select
               value={reasoningEffort}
-              options={reasoningOptions}
+              options={withConfiguredEffort(reasoningEffort, reasoningOptions)}
               disabled={disabled}
               onChange={(reasoning_effort) => update({
                 model: current.model || (reasoning_effort ? defaultModel : '') || '',

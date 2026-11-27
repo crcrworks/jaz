@@ -24,8 +24,13 @@ func fakeAntigravityCLI(t *testing.T) string {
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
-	if err := os.Link(binary, filepath.Join(root, name)); err != nil {
-		t.Fatal(err)
+	// agy answers to either name, so link both: the lookup tries "antigravity"
+	// before "agy", and a host binary by that name would otherwise shadow this
+	// one and update itself instead of being pinned.
+	for _, candidate := range []string{"antigravity", name} {
+		if err := os.Link(binary, filepath.Join(root, candidate)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return root
 }

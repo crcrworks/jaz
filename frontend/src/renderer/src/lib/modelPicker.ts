@@ -12,11 +12,14 @@ export interface ModelSelection {
 export function pickerEffortOptions(options: ReasoningEffortOption[]): ReasoningEffortOption[] {
   // Max stands in as the top stop for a model that offers it without xhigh.
   const top = options.some((option) => option.value === 'xhigh') ? 'xhigh' : 'max'
-  return ['low', 'medium', 'high', top, 'ultracode'].flatMap((value) => {
+  const stops = ['low', 'medium', 'high', top, 'ultracode'].flatMap((value) => {
     const option = options.find((option) => option.value === value)
       ?? (value === 'ultracode' ? options.find((option) => option.value === 'ultra') : undefined)
     return option ? [{ ...option, label: value === 'xhigh' ? 'Xhigh' : value === 'ultracode' ? 'Ultracode' : option.label }] : []
   })
+  // "None" turns thinking off, so it is a stop only beside a level to turn off.
+  const off = stops.length > 0 ? options.find((option) => option.value === 'none') : undefined
+  return off ? [off, ...stops] : stops
 }
 
 export function parseModelSelections(raw: string | null): Record<string, ModelSelection> {

@@ -119,6 +119,10 @@ func TestSessionTerminalAcceptsBearerWithBackendAuth(t *testing.T) {
 }
 
 func TestSessionTerminalStartsInCWDAndReplaysOnReconnect(t *testing.T) {
+	// The terminal runs whatever shell the host names, and a developer's own shell
+	// (fish, say) may redraw on the alternate screen instead of streaming the
+	// command output this test reads.
+	t.Setenv("SHELL", "/bin/sh")
 	cwd := t.TempDir()
 	if err := os.WriteFile(cwd+"/marker.txt", []byte("ok\n"), 0o644); err != nil {
 		t.Fatal(err)

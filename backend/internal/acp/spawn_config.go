@@ -59,6 +59,14 @@ func (m *Manager) spawnConfig(req SpawnRequest) (SpawnRequest, AgentConfig, stri
 	if req.ReasoningEffort != "" {
 		effort = configuredAgentReasoningEffort(req.ACPAgent, req.ReasoningEffort)
 	}
+	// Asking for no reasoning is a request for no effort, not a choice of an
+	// agent's "none" level; one it advertises is a real level an agent can run.
+	noEffort := req.NoReasoningEffort ||
+		strings.EqualFold(strings.TrimSpace(req.ReasoningEffort), "none") &&
+			!agentPolicyForAgent(req.ACPAgent).supportsReasoningEffort("none")
+	if noEffort {
+		effort = ""
+	}
 	model := strings.TrimSpace(req.Model)
 	modelOverridden := model != ""
 	if modelOverridden {
@@ -74,7 +82,9 @@ func (m *Manager) spawnConfig(req SpawnRequest) (SpawnRequest, AgentConfig, stri
 	if err := m.validateAgentModelProvider(req.ACPAgent, cfg); err != nil {
 		return SpawnRequest{}, AgentConfig{}, "", err
 	}
-	if strings.EqualFold(strings.TrimSpace(req.ReasoningEffort), "none") && agentPolicyForAgent(req.ACPAgent).effortEncodedInModel(cfg.Model) {
+	// A model id can carry its effort as a suffix, as "gpt-5/high", which is what
+	// the agent would otherwise run.
+	if noEffort && agentPolicyForAgent(req.ACPAgent).effortEncodedInModel(cfg.Model) {
 		base, _, _ := cutReasoningEffort(cfg.Model)
 		cfg.Model = strings.TrimSpace(base)
 	}
