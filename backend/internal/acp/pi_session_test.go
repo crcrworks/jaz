@@ -12,6 +12,7 @@ import (
 	"github.com/wins/jaz/backend/internal/acp"
 	mcpconfig "github.com/wins/jaz/backend/internal/mcpconfig"
 	"github.com/wins/jaz/backend/internal/mcpsession"
+	"github.com/wins/jaz/backend/internal/modelcatalog"
 	"github.com/wins/jaz/backend/internal/storage"
 )
 
@@ -130,6 +131,33 @@ func TestPiThreadKeepsJazsPlatformPrompt(t *testing.T) {
 		if !strings.Contains(args, "--append-system-prompt") {
 			t.Fatalf("pi must be launched with Jaz's prompt, got %q", args)
 		}
+	}
+}
+
+// TestPiModelsReportPisOwnThinkingLevels checks the picker's own question: pi
+// says which models reason and which levels each one runs, and Jaz reports
+// exactly that instead of reading every pi model as unable to think.
+func TestPiModelsReportPisOwnThinkingLevels(t *testing.T) {
+	store, root := newTestStore(t)
+	manager := newFakePiManager(t, store, root, "")
+
+	catalog, err := manager.DiscoverModels(testContext(t), acp.AgentPi)
+	if err != nil {
+		t.Fatalf("discover pi models: %v", err)
+	}
+	if len(catalog.Models) != 2 {
+		t.Fatalf("pi models = %#v", catalog.Models)
+	}
+	// A model pi says reasons keeps the levels pi itself would run it at: the
+	// ones its thinking map holds open without naming a value stay, and "off"
+	// is gone because this model's map says it cannot turn thinking off.
+	if got := catalog.Models[0]; got.Value != "fake/fake-model" || got.Reasoning.Status != modelcatalog.ReasoningReady ||
+		strings.Join(got.Reasoning.Efforts, ",") != "minimal,low,medium,high" {
+		t.Fatalf("reasoning model = %#v", got)
+	}
+	if got := catalog.Models[1]; got.Value != "fake/plain-model" || got.Reasoning.Status != modelcatalog.ReasoningUnavailable ||
+		len(got.Reasoning.Efforts) != 0 {
+		t.Fatalf("non-reasoning model = %#v", got)
 	}
 }
 
@@ -255,6 +283,11 @@ func TestFakePiProcess(t *testing.T) {
 		"input":            []string{"text"},
 		"thinkingLevelMap": map[string]any{"off": nil, "low": "low", "high": "high"},
 	}
+	plain := map[string]any{
+		"id": "plain-model", "name": "Plain Model", "provider": "fake",
+		"contextWindow": 128000, "maxTokens": 4096, "reasoning": false,
+		"input": []string{"text"},
+	}
 	thinking := "high"
 	emit := func(record any) {
 		data, _ := json.Marshal(record)
@@ -288,7 +321,7 @@ func TestFakePiProcess(t *testing.T) {
 		case "get_state":
 			respond(command.Type, command.ID, map[string]any{"model": model, "thinkingLevel": thinking}, "")
 		case "get_available_models":
-			respond(command.Type, command.ID, map[string]any{"models": []any{model}}, "")
+			respond(command.Type, command.ID, map[string]any{"models": []any{model, plain}}, "")
 		case "get_available_thinking_levels":
 			respond(command.Type, command.ID, map[string]any{"levels": []string{"low", "high"}}, "")
 		case "set_model", "compact":

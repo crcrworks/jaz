@@ -3,6 +3,7 @@ import { modelSuggestionFor, type ModelSuggestion } from './modelSuggestion'
 
 const REASONING_LABELS: Record<string, string> = {
   '': 'Default',
+  off: 'Off',
   none: 'None',
   minimal: 'Minimal',
   low: 'Low',
@@ -47,7 +48,12 @@ export interface ModelReasoningSelection {
   supported: boolean
   status: 'pending' | 'error' | 'ready'
   blocked: boolean
+  // why is what the picker says when the model leaves no level to choose.
+  why: string
 }
+
+const NO_LEVELS = 'This model has no thinking levels'
+const LOADING_LEVELS = 'Loading thinking levels…'
 
 export type ModelReasoningCatalog =
   | { status: 'pending' | 'error' }
@@ -73,19 +79,19 @@ export function modelReasoningSelection({
   const effort = requested.trim()
   const agentOptions = acpReasoningEffortOptions(settings, agent)
   if (catalog.status !== 'ready') {
-    return { options: agentOptions, effectiveEffort: effort, supported: true, status: catalog.status, blocked: effort !== '' }
+    return { options: agentOptions, effectiveEffort: effort, supported: true, status: catalog.status, blocked: effort !== '', why: LOADING_LEVELS }
   }
   const suggestion = modelSuggestionFor(catalog.suggestions, model)
   if (suggestion?.reasoning.status === 'pending') {
-    return { options: agentOptions, effectiveEffort: effort, supported: true, status: 'pending', blocked: effort !== '' }
+    return { options: agentOptions, effectiveEffort: effort, supported: true, status: 'pending', blocked: effort !== '', why: LOADING_LEVELS }
   }
   if (!suggestion || suggestion.reasoning.status === 'unknown') {
-    return { options: agentOptions, effectiveEffort: effort, supported: true, status: 'ready', blocked: false }
+    return { options: agentOptions, effectiveEffort: effort, supported: true, status: 'ready', blocked: false, why: '' }
   }
   if (suggestion.reasoning.status !== 'ready') {
     // The provider knows the model has no reasoning, so the agent's levels do
     // not apply to it and the turn runs without one.
-    return { options: [], effectiveEffort: '', supported: supportedReasoningEffort(effort, []), status: 'ready', blocked: false }
+    return { options: [], effectiveEffort: '', supported: supportedReasoningEffort(effort, []), status: 'ready', blocked: false, why: NO_LEVELS }
   }
   // A model that reasons on its own has no level to choose.
   const options = suggestion.reasoning.automatic ? [] : reasoningOptions(suggestion)
@@ -103,6 +109,7 @@ export function modelReasoningSelection({
     supported: usable || effort === '',
     status: 'ready',
     blocked: false,
+    why: options.length ? '' : NO_LEVELS,
   }
 }
 

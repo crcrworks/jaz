@@ -162,19 +162,20 @@ func (m piModel) Qualified() string {
 
 var thinkingOrder = []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}
 
-// Levels is the thinking levels pi says this model runs, in pi's own order.
+// Levels is the thinking levels pi says this model runs, in pi's own order: a
+// level the model maps to null, and one of xhigh or max it does not map at all,
+// are levels pi does not run. A model that does not reason runs only "off".
 func (m piModel) Levels() []string {
-	if len(m.ThinkingLevels) == 0 {
-		if m.Reasoning {
-			return nil
-		}
+	if !m.Reasoning {
 		return []string{"off"}
 	}
 	out := make([]string, 0, len(thinkingOrder))
 	for _, level := range thinkingOrder {
-		if value, ok := m.ThinkingLevels[level]; ok && value != nil {
-			out = append(out, level)
+		value, mapped := m.ThinkingLevels[level]
+		if value == nil && (mapped || level == "xhigh" || level == "max") {
+			continue
 		}
+		out = append(out, level)
 	}
 	return out
 }

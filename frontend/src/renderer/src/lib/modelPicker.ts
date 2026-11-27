@@ -17,8 +17,9 @@ export function pickerEffortOptions(options: ReasoningEffortOption[]): Reasoning
       ?? (value === 'ultracode' ? options.find((option) => option.value === 'ultra') : undefined)
     return option ? [{ ...option, label: value === 'xhigh' ? 'Xhigh' : value === 'ultracode' ? 'Ultracode' : option.label }] : []
   })
-  // "None" turns thinking off, so it is a stop only beside a level to turn off.
-  const off = stops.length > 0 ? options.find((option) => option.value === 'none') : undefined
+  // Turning thinking off is a stop only beside a level to turn off. An agent
+  // that names the switch "off", as pi does, keeps that name.
+  const off = stops.length === 0 ? undefined : options.find((option) => option.value === 'none') ?? options.find((option) => option.value === 'off')
   return off ? [off, ...stops] : stops
 }
 
