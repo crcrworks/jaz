@@ -147,16 +147,23 @@ func (m *Manager) openCodeProviderConfig(model string) (openCodeProviderConfig, 
 	return result, true
 }
 
+// addOpenCodeReasoningVariant names the effort as a variant of the model.
+// OpenCode offers a model's effort levels as its variants, so a level has to be
+// written into the model entry Jaz describes, whatever provider serves it. A
+// provider or model Jaz does not describe keeps the agent's own metadata.
 func addOpenCodeReasoningVariant(content *openCodeConfigContent, model, effort string) {
 	providerID, modelID := modelprovider.SplitProviderModel(model)
 	effort, err := NormalizeAgentReasoningEffort(AgentOpenCode, effort)
-	if err != nil || providerID != modelprovider.ProviderOpenRouter || modelID == "" || effort == "" {
+	if err != nil || modelID == "" || effort == "" {
 		return
 	}
 	if content.Provider == nil {
 		content.Provider = map[string]openCodeProviderConfig{}
 	}
 	provider := content.Provider[providerID]
+	if _, described := provider.Models[modelID]; !described && providerID != modelprovider.ProviderOpenRouter {
+		return
+	}
 	if provider.Models == nil {
 		provider.Models = map[string]openCodeModelConfig{}
 	}

@@ -29,7 +29,9 @@ func TestDevinAuthReadsOnlyItsOwnLogin(t *testing.T) {
 	if !strings.Contains(status.Reason, "devin auth login") {
 		t.Fatalf("signed-out reason = %q", status.Reason)
 	}
-	if status.LoginCommand != "devin auth login" {
+	// A host with its own devin installed resolves the absolute path, so the
+	// check is on the login subcommand rather than on how it was found.
+	if !strings.HasSuffix(status.LoginCommand, "devin auth login") {
 		t.Fatalf("login command = %q", status.LoginCommand)
 	}
 	if _, err := os.Stat(filepath.Dir(status.StoragePath)); !os.IsNotExist(err) {

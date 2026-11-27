@@ -48,6 +48,19 @@ func (s *connectionState) configResponse(sessionID acpschema.SessionID, raw json
 	s.pending = append(s.pending, sessionNotification{SessionID: string(sessionID), Update: raw})
 }
 
+// notice records something the user has to know about this session, such as a
+// reasoning effort the agent could not apply, for the thread's own panel.
+func (s *connectionState) notice(text string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.notices = append(s.notices, text)
+	if s.job != nil {
+		s.job.mu.Lock()
+		s.job.agentSession.Notices = append(s.job.agentSession.Notices, text)
+		s.job.mu.Unlock()
+	}
+}
+
 // initialized records what the agent's initialize result says about it.
 func (s *connectionState) initialized(raw json.RawMessage) {
 	var response struct {

@@ -56,7 +56,7 @@ func (m *Manager) applySessionControls(job *jobState, raw json.RawMessage) bool 
 			case "model":
 				job.Model = option.CurrentValue
 			case "thought_level":
-				job.ReasoningEffort = option.CurrentValue
+				job.ReasoningEffort = policy.sessionConfigEffort(option.CurrentValue)
 			case "mode":
 				if job.Modes.userModeID != "" && option.ID != job.Modes.planConfigID && option.CurrentValue != job.Modes.PlanModeID {
 					job.Modes.userModeID = option.CurrentValue

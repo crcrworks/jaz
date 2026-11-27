@@ -292,6 +292,11 @@ func (p agentPolicy) normalizeReasoningEffort(value string) (string, error) {
 			return value, nil
 		}
 	}
+	// An agent names its own default as a level, as OpenCode does with
+	// "default"; that is Jaz's empty effort, not a level a session is pinned to.
+	if value == "default" && p.supportsReasoningEffort("") {
+		return "", nil
+	}
 	return "", fmt.Errorf("unknown reasoning effort %q; valid values are %s", value, strings.Join(reasoningEffortValues(p.effortOptions), ", "))
 }
 
@@ -505,7 +510,7 @@ func (m *Manager) configuredModeState(
 			options = refreshed
 			activeModelOptions = true
 		}
-		effortRaw, err := m.applyConfiguredReasoningEffort(
+		effortRaw, notice, err := m.applyConfiguredReasoningEffort(
 			ctx,
 			peer,
 			agentName,
@@ -519,6 +524,10 @@ func (m *Manager) configuredModeState(
 			return ModeState{}, err
 		}
 		ac.state.configResponse(session.response.SessionID, effortRaw)
+		if notice != "" {
+			m.log.Warn("acp model runs without the configured reasoning effort", "agent", agentName, "model", model, "effort", effort)
+			ac.state.notice(notice)
+		}
 	}
 	return m.initializeModeState(ctx, peer, agentName, session)
 }
@@ -532,30 +541,49 @@ func (m *Manager) applyConfiguredReasoningEffort(
 	effort string,
 	options sessionConfigOptionsState,
 	activeModelOptions bool,
-) (json.RawMessage, error) {
+) (json.RawMessage, string, error) {
 	if effort == "" {
-		return nil, nil
+		return nil, "", nil
 	}
 	policy := agentPolicyForAgent(agentName)
 	if !policy.usesReasoningEffortConfigOption() && options.effortConfigID == "" {
-		return nil, fmt.Errorf("acp agent %q model %q did not advertise reasoning controls", agentName, model)
+		return nil, "", fmt.Errorf("acp agent %q model %q did not advertise reasoning controls", agentName, model)
 	}
 	if activeModelOptions && !options.effortConfigPresent {
-		return nil, nil
+		return nil, droppedEffortNotice(agentName, model, effort, nil), nil
 	}
 	if options.effortConfigPresent && !configOptionValueAvailable(options.effortOptions, effort) {
-		if policy.effortsPerModel {
-			return nil, nil
+		if !policy.effortsPerModel {
+			return nil, "", fmt.Errorf(
+				"set acp agent %q reasoning effort %q for model %q: the active model did not advertise that reasoning effort; advertised values: %s",
+				agentName,
+				effort,
+				configuredSessionModel(model),
+				configOptionValuesForError(options.effortOptions),
+			)
 		}
-		return nil, fmt.Errorf(
-			"set acp agent %q reasoning effort %q for model %q: the active model did not advertise that reasoning effort; advertised values: %s",
-			agentName,
-			effort,
-			configuredSessionModel(model),
-			configOptionValuesForError(options.effortOptions),
-		)
+		// Thinking off is a level the agent owns rather than one a model has to
+		// offer, so its session config decides whether this model can turn its
+		// thinking off.
+		if effort == "none" && policy.supportsReasoningEffort(effort) {
+			return nil, "", nil
+		}
+		return nil, droppedEffortNotice(agentName, model, effort, options.effortOptions), nil
 	}
-	return m.setConfiguredReasoningEffort(ctx, peer, agentName, sessionID, effort, options.effortConfigID)
+	raw, err := m.setConfiguredReasoningEffort(ctx, peer, agentName, sessionID, effort, options.effortConfigID)
+	return raw, "", err
+}
+
+// droppedEffortNotice is what the user reads when a model starts without the
+// reasoning effort its thread asked for, which is the model's own default
+// rather than the configured level.
+func droppedEffortNotice(agentName, model, effort string, advertised []string) string {
+	notice := fmt.Sprintf("%s did not offer reasoning effort %s for model %s, so this thread runs on the model's own default.",
+		CanonicalAgentName(agentName), effort, displayModel(model))
+	if len(advertised) > 0 {
+		notice += " Values it offers: " + configOptionValuesForError(advertised) + "."
+	}
+	return notice
 }
 
 // parseEffortOptions extracts the advertised reasoning effort values from a
