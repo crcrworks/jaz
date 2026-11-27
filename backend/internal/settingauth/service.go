@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/wins/jaz/backend/internal/acp"
 	"github.com/wins/jaz/backend/internal/sessionevents"
 	jazsettings "github.com/wins/jaz/backend/internal/settings"
 	"github.com/wins/jaz/backend/internal/storage"
@@ -26,6 +27,12 @@ type Dependencies struct {
 	Bus       *sessionevents.Bus
 	Sessions  SessionReader
 	Approvals ApprovalRequester
+	// Agents and Models are what a memory change is checked against: the
+	// agents Jaz can actually start, and the reasoning efforts their models
+	// accept. The HTTP route checks the same way through the server's own
+	// catalog.
+	Agents func() (jazsettings.AgentDefaults, error)
+	Models acp.ModelCatalog
 	// Applied runs the work Jaz does after an app-global setting is saved:
 	// memory's scheduler and tool sync, browser and computer tool resync.
 	// The settings tool writes the value itself, so whoever owns that work
@@ -62,8 +69,11 @@ type BotUpdate struct {
 	Agent           *string
 	Model           *string
 	ReasoningEffort string
-	Plugins         *[]string
-	Workspaces      *[]string
+	// InheritPlugins restores the bot's inherited plugin set: a plugins value
+	// of null means every installed plugin, not an empty choice.
+	InheritPlugins bool
+	Plugins        *[]string
+	Workspaces     *[]string
 }
 
 type ApprovalRequester interface {
@@ -181,12 +191,16 @@ func (s *Service) Update(ctx context.Context, sessionID string, input UpdateInpu
 		s.audit(bot, target, storage.SettingChange{}, err)
 		return out, err
 	}
-	if err := s.validate(target, next); err != nil {
+	// validate is what keeps a value Jaz could not read back from ever being
+	// stored, so it runs before the approval card and its answer is the value
+	// that gets written.
+	if next, err = s.validate(target, next); err != nil {
 		s.audit(bot, target, storage.SettingChange{}, err)
 		return out, err
 	}
 	oldValue, err := s.current(bot, target)
 	if err != nil {
+		s.audit(bot, target, storage.SettingChange{}, err)
 		return out, err
 	}
 	change := storage.SettingChange{
@@ -212,6 +226,8 @@ func (s *Service) Update(ctx context.Context, sessionID string, input UpdateInpu
 	}
 	// An app-wide change stores its audit row in the same transaction, so only
 	// a failure or a bot-local change records one here.
+	// An app-wide change stores its audit row with the value in one
+	// transaction, so a failure has no row yet and records one here.
 	if err := s.apply(ctx, bot, target, next, change); err != nil {
 		s.audit(bot, target, change, err)
 		return out, err
@@ -223,7 +239,9 @@ func (s *Service) Update(ctx context.Context, sessionID string, input UpdateInpu
 	out.Preview = change.NewValue
 	if target.appWide() && s.deps.Applied != nil {
 		if err := s.deps.Applied(ctx, target.Key); err != nil {
-			return out, fmt.Errorf("%s saved, but the change did not take effect yet: %w", target.Key, err)
+			// The value and its audit row are stored; this is the follow-up
+			// work failing, not the change.
+			return out, fmt.Errorf("%s saved, but it has not taken effect yet: %w", target.Key, err)
 		}
 	}
 	s.note(bot, target, change)
@@ -288,9 +306,17 @@ func (s *Service) next(bot Bot, target Entry, input UpdateInput) (json.RawMessag
 	}
 	switch target.Key {
 	case "bot.plugins":
+		if isNull(value) {
+			// null is the inherited set, which a narrowed bot may not take
+			// back: that would add plugins rather than drop them.
+			if bot.Plugins != nil {
+				return nil, fmt.Errorf("%w: a bot cannot give itself plugins (inheriting every installed plugin)", ErrNotAllowed)
+			}
+			return value, nil
+		}
 		wanted, err := stringList(value)
 		if err != nil {
-			return nil, errors.New("bot.plugins needs an array of plugin ids")
+			return nil, errors.New("bot.plugins needs an array of plugin ids, or null to inherit every installed plugin")
 		}
 		if added := missingFrom(wanted, currentPlugins(bot)); len(added) > 0 {
 			return nil, fmt.Errorf("%w: a bot cannot give itself plugins (%s)", ErrNotAllowed, strings.Join(added, ", "))
@@ -343,28 +369,47 @@ func stringList(value json.RawMessage) ([]string, error) {
 	return list, err
 }
 
-// validate reads an app-global value as the typed settings it holds, so a
-// value that would not load again never reaches the approval card.
-func (s *Service) validate(target Entry, value json.RawMessage) error {
+// validate reads an app-global value the way Jaz reads it back, and returns it
+// in the shape that will be stored. A value Jaz could not load and use never
+// reaches the approval card, and what the user approves is what gets written.
+func (s *Service) validate(target Entry, value json.RawMessage) (json.RawMessage, error) {
+	if target.appWide() && isNull(value) {
+		// null is what an untouched setting reads as; writing it back would
+		// store a zero value nobody asked for.
+		return nil, fmt.Errorf("%s has no value yet; send the settings Jaz should store", target.Key)
+	}
 	switch target.Key {
 	case "memory.settings":
 		var settings jazsettings.MemorySettings
-		return typedValue(value, &settings, target.Key)
+		if err := typedValue(value, &settings, target.Key); err != nil {
+			return nil, err
+		}
+		agents, err := s.deps.Agents()
+		if err != nil {
+			return nil, err
+		}
+		if settings, err = jazsettings.ValidateMemorySettings(settings, agents, acp.ModelCapabilities{Catalog: s.deps.Models}, true); err != nil {
+			return nil, err
+		}
+		return json.Marshal(settings)
 	case "browser.settings":
 		var settings jazsettings.BrowserSettings
-		return typedValue(value, &settings, target.Key)
+		return value, typedValue(value, &settings, target.Key)
 	case "computer.settings":
 		var settings jazsettings.ComputerSettings
-		return typedValue(value, &settings, target.Key)
+		return value, typedValue(value, &settings, target.Key)
 	case "devices.settings":
 		var settings jazsettings.DeviceSettings
 		if err := typedValue(value, &settings, target.Key); err != nil {
-			return err
+			return nil, err
 		}
-		_, err := jazsettings.NormalizeDeviceSettings(settings)
-		return err
+		settings, err := jazsettings.NormalizeDeviceSettings(settings)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(settings)
 	}
-	return nil
+	return value, nil
 }
 
 func typedValue(value json.RawMessage, out any, key string) error {
@@ -372,6 +417,10 @@ func typedValue(value json.RawMessage, out any, key string) error {
 		return fmt.Errorf("%s does not accept that value: %w", key, err)
 	}
 	return nil
+}
+
+func isNull(value json.RawMessage) bool {
+	return strings.TrimSpace(string(value)) == "null"
 }
 
 func requestedValue(input UpdateInput, target Entry) (json.RawMessage, error) {
@@ -459,6 +508,10 @@ func (s *Service) applyBot(ctx context.Context, bot Bot, target Entry, value jso
 		update.Model = &model.Model
 		update.ReasoningEffort = model.ReasoningEffort
 	case "bot.plugins":
+		if isNull(value) {
+			update.InheritPlugins = true
+			break
+		}
 		var plugins []string
 		if err := json.Unmarshal(value, &plugins); err != nil {
 			return errors.New("bot.plugins needs an array of plugin ids")

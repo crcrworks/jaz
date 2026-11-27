@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/wins/jaz/backend/internal/modelcatalog"
 	"github.com/wins/jaz/backend/internal/sessionevents"
 	jazsettings "github.com/wins/jaz/backend/internal/settings"
 	"github.com/wins/jaz/backend/internal/storage"
@@ -34,6 +35,7 @@ type settingsFixture struct {
 	thread  storage.Session
 	events  *sessionevents.Bus
 	applied []string
+	agents  jazsettings.AgentDefaults
 }
 
 // fakeBots stands in for the bot service: storage boundaries are faked, the
@@ -60,7 +62,9 @@ func (b *fakeBots) Update(_ context.Context, _ string, input BotUpdate) (Bot, er
 		b.bot.Model = strings.TrimSpace(*input.Model)
 		b.bot.ReasoningEffort = input.ReasoningEffort
 	}
-	if input.Plugins != nil {
+	if input.InheritPlugins {
+		b.bot.Plugins = nil
+	} else if input.Plugins != nil {
 		b.bot.Plugins = input.Plugins
 	}
 	if input.Workspaces != nil {
@@ -87,10 +91,16 @@ func newSettingsFixture(t *testing.T, approvals *fakeApprovals) *settingsFixture
 	}
 	bots := &fakeBots{bot: Bot{ID: bot.ID, Name: "Gimli", Prompt: "Hold the line", Model: "gpt-5", ReasoningEffort: "high"}}
 	events := sessionevents.New()
-	fixture := &settingsFixture{t: t, store: store, bots: bots, events: events, bot: bots.bot}
+	fixture := &settingsFixture{t: t, store: store, bots: bots, events: events, bot: bots.bot,
+		agents: jazsettings.AgentDefaults{ACP: map[string]jazsettings.ACPAgentDefaults{
+			"claude": {Enabled: true},
+			"codex":  {Enabled: true},
+		}}}
 	fixture.service = New(Dependencies{
 		Settings: store, Changes: store, Bots: bots,
 		Events: store, Bus: events, Sessions: store, Approvals: approvals,
+		Agents: func() (jazsettings.AgentDefaults, error) { return fixture.agents, nil },
+		Models: modelcatalog.NewService(nil),
 		Applied: func(_ context.Context, key string) error {
 			fixture.applied = append(fixture.applied, key)
 			return nil
@@ -397,5 +407,81 @@ func TestNeedsReviewMeansAnApprovalCard(t *testing.T) {
 		if setting.NeedsReview != want {
 			t.Fatalf("%s needs_review = %v, want %v", setting.Key, setting.NeedsReview, want)
 		}
+	}
+}
+
+// An untouched app-global setting reads as null, and writing that null back
+// must not turn its default into a stored zero value.
+func TestUnsetAppGlobalStaysUnset(t *testing.T) {
+	approvals := &fakeApprovals{approve: true}
+	fixture := newSettingsFixture(t, approvals)
+	view, err := fixture.service.Read(fixture.thread.ID, "memory.settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Value != "null" {
+		t.Fatalf("unset memory.settings = %q", view.Value)
+	}
+	if _, err := fixture.update(UpdateInput{Key: "memory.settings", Value: view.Value}); err == nil {
+		t.Fatal("writing null back was accepted")
+	}
+	if len(approvals.asked) != 0 {
+		t.Fatalf("writing null back opened an approval card: %v", approvals.asked)
+	}
+	settings, err := jazsettings.LoadMemorySettings(fixture.store)
+	if err != nil || !settings.Enabled {
+		t.Fatalf("memory settings = %+v, %v", settings, err)
+	}
+}
+
+// A memory change naming an agent Jaz cannot start is refused before the card,
+// the same way the HTTP route refuses it.
+func TestMemoryAgentIsCheckedBeforeApproval(t *testing.T) {
+	for name, value := range map[string]string{
+		"unknown agent": `{"enabled":true,"agent":"devin"}`,
+		"built-in jaz":  `{"enabled":true,"agent":"jaz"}`,
+		"disabled":      `{"enabled":true,"agent":"kimi"}`,
+	} {
+		approvals := &fakeApprovals{approve: true}
+		fixture := newSettingsFixture(t, approvals)
+		t.Run(name, func(t *testing.T) {
+			if _, err := fixture.update(UpdateInput{Key: "memory.settings", Value: value}); err == nil {
+				t.Fatalf("%s was accepted", name)
+			}
+			if len(approvals.asked) != 0 {
+				t.Fatalf("%s opened an approval card", name)
+			}
+			if rows := fixture.audit(); len(rows) != 1 || rows[0].Error == "" {
+				t.Fatalf("%s audit = %+v", name, rows)
+			}
+		})
+	}
+}
+
+// A bot inheriting every plugin reads null; writing that null back keeps the
+// inheritance instead of storing an empty choice.
+func TestBotPluginsNullKeepsInheritance(t *testing.T) {
+	fixture := newSettingsFixture(t, &fakeApprovals{})
+	view, err := fixture.service.Read(fixture.thread.ID, "bot.plugins")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Value != "null" {
+		t.Fatalf("inherited plugins = %q", view.Value)
+	}
+	if _, err := fixture.update(UpdateInput{Key: "bot.plugins", Value: view.Value}); err != nil {
+		t.Fatal(err)
+	}
+	if bot, _ := fixture.bots.Load(fixture.bot.ID); bot.Plugins != nil {
+		t.Fatalf("writing null back stored plugins %v", *bot.Plugins)
+	}
+	// Once narrowed, null would add every installed plugin back, so the tool
+	// refuses it as widening.
+	fixture.bots.bot.Plugins = &[]string{"jaz-tools"}
+	if _, err := fixture.update(UpdateInput{Key: "bot.plugins", Value: "null"}); !errors.Is(err, ErrNotAllowed) {
+		t.Fatalf("restoring inheritance = %v, want ErrNotAllowed", err)
+	}
+	if bot, _ := fixture.bots.Load(fixture.bot.ID); len(*bot.Plugins) != 1 {
+		t.Fatalf("refused change still altered plugins: %v", *bot.Plugins)
 	}
 }

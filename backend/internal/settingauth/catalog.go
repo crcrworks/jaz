@@ -65,7 +65,7 @@ var entries = []Entry{
 	{Key: "bot.model", Scope: ScopeBot, Risk: RiskStandard, Editable: true,
 		Description: "The model and reasoning effort the bot runs with."},
 	{Key: "bot.plugins", Scope: ScopeBot, Risk: RiskPermission, Editable: true,
-		Description: "The plugin ids the bot may use. Empty inherits every installed plugin, which the bot cannot restore once narrowed."},
+		Description: "The plugin ids the bot may use. null means every installed plugin; a bot can drop plugins but never take that inherited set back."},
 	{Key: "bot.workspaces", Scope: ScopeBot, Risk: RiskPermission, Editable: true,
 		Description: "The server directories the bot may work in. The bot can only remove paths, never add them."},
 }

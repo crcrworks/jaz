@@ -53,11 +53,22 @@ own default; `settings_read` says so rather than repeating the default.
    cannot give itself a plugin, a workspace, or a wider seat for another or
    child bot. Those requests come back as errors, with no approval UI.
 
-Before a change is offered, `next` reads an app-global value as the typed
-settings it holds (`MemorySettings`, `BrowserSettings`, `ComputerSettings`,
-`DeviceSettings` plus its URL normalization). A value Jaz could not load back
-fails there, so a mistyped `{"enabled": "maybe"}` never reaches an approval card
-and never breaks the readers that load the setting on every turn.
+Before a change is offered, `validate` reads an app-global value the way Jaz
+reads it back and returns the exact value that will be stored. Memory goes
+through the same `settings.ValidateMemorySettings` the HTTP route uses, so an
+agent Jaz cannot start (unknown, disabled, the built-in `jaz`) and a reasoning
+effort its model does not accept are refused here too; devices run their URL
+normalization. A value Jaz could not load back fails there, so a mistyped
+`{"enabled": "maybe"}` never reaches an approval card and never breaks the
+readers that load the setting on every turn. What the user approves on the card
+is what gets written.
+
+An app-global change replaces the stored value whole, not per field: `{}` stores
+a memory setting with `enabled: false`, because that is what an empty
+`MemorySettings` means. `settings_read` reports the stored value, so a caller
+that wants to keep a field reads first and sends it back. `null` is what an
+untouched setting reads as, and writing that `null` back is refused: it would
+store a zero value nobody asked for.
 
 After an approved app-global change is stored, the settings tool runs the same
 follow-up the HTTP settings routes do — memory's scheduler start/stop, the
@@ -69,6 +80,13 @@ Approval option kinds are `approve`/`deny`, which is deliberately outside the
 approval is not a plan and must not take over the plan panel.
 
 ## Secrets
+
+`bot.plugins` reads `null` while the bot inherits every installed plugin. That
+null round trips as long as the bot inherits; once narrowed, `null` would add
+every installed plugin back, so the tool refuses it as widening and the bot has
+to name the set it wants. Every attempt — including `current` read failures —
+leaves an audit row, and a failure in the post-save follow-up is reported
+without a second row, because the value and its row are already stored.
 
 A `secret` entry reports its existence and metadata only. `settings_read`
 returns no value, the approval body and the audit row say `(secret)`, and a

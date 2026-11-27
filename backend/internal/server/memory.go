@@ -204,23 +204,7 @@ func (s *Server) normalizeMemorySettingsInput(store storage.SettingsStorage, inp
 	if err != nil {
 		return jazsettings.MemorySettings{}, err
 	}
-	if settings.Agent == acp.AgentJaz {
-		return jazsettings.MemorySettings{}, fmt.Errorf("built-in Jaz cannot be used as the memory agent yet")
-	}
-	if err := validateMemoryAgent(agentSettings, settings.Agent); err != nil {
-		return jazsettings.MemorySettings{}, err
-	}
-	if settings.ReasoningEffort != "" {
-		provider := agentSettings.ACP[settings.Agent].ModelProvider
-		model := settings.WorkerModel(agentSettings)
-		if err := (acp.ModelCapabilities{Catalog: s.ModelCatalog}).ValidateReasoningEffort(settings.Agent, provider, model, settings.ReasoningEffort); err != nil {
-			if input.ReasoningEffort != nil {
-				return jazsettings.MemorySettings{}, err
-			}
-			settings.ReasoningEffort = ""
-		}
-	}
-	return settings, nil
+	return jazsettings.ValidateMemorySettings(settings, agentSettings, acp.ModelCapabilities{Catalog: s.ModelCatalog}, input.ReasoningEffort != nil)
 }
 
 func validateMemoryAgent(agentSettings jazsettings.AgentDefaults, agent string) error {

@@ -57,9 +57,21 @@ func NewSettingsApplied(store *sqlitestore.Store, memory *memoryservice.Service,
 	}
 }
 
+// settingAuthMemoryCheck is what a memory change is validated against: the
+// agents Jaz can start, and the models they offer.
+func settingAuthMemoryCheck(catalog acp.AgentCatalog, models acp.ModelCatalog, store *sqlitestore.Store) func() (jazsettings.AgentDefaults, error) {
+	selectable := acp.SelectableAgentCatalog(catalog)
+	if len(selectable) == 0 {
+		selectable = acp.BuiltinAgents()
+	}
+	return func() (jazsettings.AgentDefaults, error) {
+		return jazsettings.LoadEffectiveAgentDefaults(store, selectable)
+	}
+}
+
 // NewSettingAuth serves a bot's settings tools: what it may see, what it may
 // change alone, and what waits for the user.
-func NewSettingAuth(store *sqlitestore.Store, botService *bots.Service, events *sessionevents.Bus, manager *acp.Manager, applied SettingsApplied) *settingauth.MCPTools {
+func NewSettingAuth(store *sqlitestore.Store, botService *bots.Service, events *sessionevents.Bus, manager *acp.Manager, catalog acp.AgentCatalog, models acp.ModelCatalog, applied SettingsApplied) *settingauth.MCPTools {
 	return settingauth.NewMCPTools(settingauth.New(settingauth.Dependencies{
 		Settings:  store,
 		Changes:   store,
@@ -68,6 +80,8 @@ func NewSettingAuth(store *sqlitestore.Store, botService *bots.Service, events *
 		Bus:       events,
 		Sessions:  store,
 		Approvals: manager,
+		Agents:    settingAuthMemoryCheck(catalog, models, store),
+		Models:    models,
 		Applied:   applied,
 	}))
 }

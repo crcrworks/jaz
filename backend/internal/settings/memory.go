@@ -3,8 +3,10 @@ package settings
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
+	"github.com/wins/jaz/backend/internal/acp"
 	"github.com/wins/jaz/backend/internal/storage"
 )
 
@@ -65,6 +67,39 @@ func LoadMemorySettings(store storage.SettingsStorage) (MemorySettings, error) {
 		Model:           strings.TrimSpace(stored.Model),
 		ReasoningEffort: strings.TrimSpace(stored.ReasoningEffort),
 	}, nil
+}
+
+// ValidateMemorySettings is the one check the HTTP route and a bot's settings
+// tool share: memory cannot run on an agent Jaz cannot start, and its reasoning
+// effort has to fit the model it will run. An inherited effort that no longer
+// fits is dropped unless the caller asked for it.
+func ValidateMemorySettings(settings MemorySettings, agents AgentDefaults, caps acp.ModelCapabilities, effortExplicit bool) (MemorySettings, error) {
+	settings = NormalizeMemorySettings(settings)
+	settings.Agent = acp.CanonicalAgentName(settings.Agent)
+	if settings.Agent == "" {
+		return settings, nil
+	}
+	if settings.Agent == acp.AgentJaz {
+		return MemorySettings{}, fmt.Errorf("built-in Jaz cannot be used as the memory agent yet")
+	}
+	agent, ok := agents.ACP[settings.Agent]
+	if !ok {
+		return MemorySettings{}, fmt.Errorf("unknown memory agent %q", settings.Agent)
+	}
+	if !agent.Enabled {
+		return MemorySettings{}, fmt.Errorf("memory agent %q is not enabled", settings.Agent)
+	}
+	if settings.ReasoningEffort == "" {
+		return settings, nil
+	}
+	model := settings.WorkerModel(agents)
+	if err := caps.ValidateReasoningEffort(settings.Agent, agent.ModelProvider, model, settings.ReasoningEffort); err != nil {
+		if effortExplicit {
+			return MemorySettings{}, err
+		}
+		settings.ReasoningEffort = ""
+	}
+	return settings, nil
 }
 
 func NormalizeMemorySettings(settings MemorySettings) MemorySettings {

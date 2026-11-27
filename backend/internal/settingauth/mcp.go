@@ -24,7 +24,7 @@ func (t *MCPTools) AddTo(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "settings_read",
 		Title:       "Read a Jaz setting",
-		Description: "Read one setting's metadata and, unless it is secret, the value it holds now. An app-wide setting nobody has changed yet reads as null and runs on Jaz's default.",
+		Description: "Read one setting's metadata and, unless it is secret, the value it holds now. An app-wide setting nobody has changed yet reads as null and runs on Jaz's default; send a real value rather than that null back.",
 	}, t.Read)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "settings_update",
