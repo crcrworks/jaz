@@ -79,6 +79,14 @@ func NormalizeAgentAuthConfig(name string, auth AgentAuthConfig) (AgentAuthConfi
 	if name == AgentCopilot && path != "" {
 		return AgentAuthConfig{}, fmt.Errorf("acp agent %q uses its native COPILOT_HOME configuration", name)
 	}
+	if name == AgentDevin {
+		if mode == AuthModeJazProfile {
+			return AgentAuthConfig{}, fmt.Errorf("acp agent %q signs in through Devin's own CLI login, not a Jaz profile", name)
+		}
+		if path != "" {
+			return AgentAuthConfig{}, fmt.Errorf("acp agent %q keeps its login in Devin's own data directory", name)
+		}
+	}
 	if name == AgentMicrosoftCopilot {
 		if mode == AuthModeExistingCLI {
 			return AgentAuthConfig{}, fmt.Errorf("acp agent %q uses Jaz-managed Microsoft Work/School OAuth, not an external CLI profile", name)
@@ -160,6 +168,8 @@ func resolveAgentAuthWithProviders(name string, cfg AgentConfig, root string, en
 		return resolveMuseAuth(root, env)
 	case AgentCopilot:
 		return resolveCopilotAuth(env)
+	case AgentDevin:
+		return resolveDevinAuth(env)
 	case AgentMicrosoftCopilot:
 		return resolveMicrosoftCopilotAuth(cfg)
 	default:
@@ -518,6 +528,8 @@ func DisconnectAgentAuth(ctx context.Context, name string, cfg AgentConfig, root
 		return disconnectMuseAuth(ctx, cfg, root)
 	case AgentCopilot:
 		return ManualDisconnectError(agentManualDisconnect(name, cfg))
+	case AgentDevin:
+		return disconnectDevinAuth(ctx, cfg)
 	case AgentMicrosoftCopilot:
 		return disconnectMicrosoftCopilotAuth(ctx, cfg)
 	default:

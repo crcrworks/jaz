@@ -24,6 +24,7 @@ const (
 	AgentAntigravity      = "antigravity"
 	AgentMuse             = "muse"
 	AgentCopilot          = "copilot"
+	AgentDevin            = "devin"
 	AgentMicrosoftCopilot = m365copilot.AgentName
 
 	AgentProviderModeNone          = ""
@@ -44,7 +45,7 @@ func CanonicalAgentName(name string) string {
 
 func AgentSupportsCompact(name string) bool {
 	switch CanonicalAgentName(name) {
-	case AgentCodex, AgentClaude:
+	case AgentCodex, AgentClaude, AgentDevin:
 		return true
 	default:
 		return false
@@ -88,7 +89,8 @@ func promptWithModules(base string, modules promptmodule.Modules) string {
 //   - kimi (Jaz fork) appends a _meta.systemPrompt string to its native system
 //     prompt without persisting it in conversation history.
 //
-// Unknown agents get the codex-style bare string.
+// Unknown agents get the codex-style bare string; agents that read their prompt
+// at launch, such as devin's rules file, never reach this.
 func systemPromptMeta(agent, prompt string, fresh bool) map[string]any {
 	switch CanonicalAgentName(agent) {
 	case AgentClaude:
@@ -314,6 +316,7 @@ var builtinAgentOrder = []string{
 	AgentAntigravity,
 	AgentMuse,
 	AgentCopilot,
+	AgentDevin,
 	AgentMicrosoftCopilot,
 }
 
@@ -359,6 +362,10 @@ func BuiltinAgents() AgentCatalog {
 		AgentCopilot: {
 			ManagedAdapter:     "copilot",
 			ManagedAdapterArgs: []string{"--acp", "--stdio"},
+		},
+		AgentDevin: {
+			Command: "devin",
+			Args:    []string{"acp"},
 		},
 		AgentMicrosoftCopilot: {
 			BuiltinBridge: true,
