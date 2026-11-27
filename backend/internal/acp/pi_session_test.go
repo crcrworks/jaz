@@ -12,6 +12,7 @@ import (
 	"github.com/wins/jaz/backend/internal/acp"
 	mcpconfig "github.com/wins/jaz/backend/internal/mcpconfig"
 	"github.com/wins/jaz/backend/internal/mcpsession"
+	modelprovider "github.com/wins/jaz/backend/internal/provider"
 	"github.com/wins/jaz/backend/internal/storage"
 )
 
@@ -81,6 +82,35 @@ func TestPiThreadsRunInJazsOwnProfile(t *testing.T) {
 	}
 	if info, err := os.Stat(env["PI_CODING_AGENT_DIR"]); err != nil || !info.IsDir() {
 		t.Fatalf("pi profile must be prepared: %v", err)
+	}
+}
+
+// TestPiThreadBindsModelProviderKey checks the runtime launch environment, not
+// just the settings probe: a key in Model Providers must reach pi's own variable
+// in the process Jaz actually spawns. A built-in provider is the case that used
+// to be dropped.
+func TestPiThreadBindsModelProviderKey(t *testing.T) {
+	// openai is exactly as Settings holds it for a built-in: a key and nothing
+	// else. commandcode is a provider pi does not describe itself.
+	for _, test := range []struct {
+		provider string
+		variable string
+		config   modelprovider.ModelProviderConfig
+	}{
+		{"openai", "OPENAI_API_KEY", modelprovider.ModelProviderConfig{APIKey: "openai-secret"}},
+		{"commandcode", "JAZ_PROVIDER_COMMANDCODE_API_KEY", modelprovider.ModelProviderConfig{APIKey: "commandcode-secret", BaseURL: "https://provider.test/v1", Type: "openai-compatible"}},
+	} {
+		store, root := newTestStore(t)
+		manager := newFakeNamedAgentManagerWithOptions(t, store, root, acp.AgentPi, map[string]string{}, test.provider+"/some-model", "", func(cfg *acp.Config) {
+			cfg.Providers = map[string]modelprovider.ModelProviderConfig{test.provider: test.config}
+		})
+		env, err := manager.ProbePiEnv(acp.AgentPi)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if env[test.variable] != test.config.APIKey {
+			t.Fatalf("%s: %s not bound into pi's launch env", test.provider, test.variable)
+		}
 	}
 }
 
@@ -180,7 +210,6 @@ func newFakePiManager(t *testing.T, store acp.Store, root, launchLog string, con
 func shellQuoteArg(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
-
 
 // TestPiMcpServersNameTheThread checks the headers pi's own MCP client sends:
 // Jaz's tools read the thread from X-Jaz-Session-ID, so a pi thread that leaves
@@ -289,4 +318,3 @@ func TestFakePiProcess(t *testing.T) {
 		}
 	}
 }
-

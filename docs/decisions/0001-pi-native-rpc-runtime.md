@@ -25,7 +25,7 @@ record shapes appear; the runtime contract above it stays transport-neutral.
 - **Credentials.** pi reads `auth.json` in its own agent directory.
   `PI_CODING_AGENT_DIR` points at `<root>/acp/pi`, so a Jaz thread never reads
   or writes the user's `~/.pi`. Jaz also feeds its own Model Providers to pi
-  (decision 0008): each key goes to the provider's environment variable, and
+  (decision 0009): each key goes to the provider's environment variable, and
   providers pi does not describe are declared in that profile's `models.json`
   naming the variable, so no secret reaches the profile. pi still resolves
   credentials and answers `auth check`.
