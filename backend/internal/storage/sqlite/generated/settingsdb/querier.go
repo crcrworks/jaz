@@ -11,6 +11,8 @@ import (
 type Querier interface {
 	DeleteSetting(ctx context.Context, arg DeleteSettingParams) (int64, error)
 	GetSetting(ctx context.Context, arg GetSettingParams) (Setting, error)
+	InsertSettingChange(ctx context.Context, arg InsertSettingChangeParams) error
+	ListSettingChanges(ctx context.Context, threadID string) ([]SettingChange, error)
 	ListSettings(ctx context.Context, namespace string) ([]Setting, error)
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error
 }

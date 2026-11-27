@@ -711,9 +711,17 @@ export interface Bot {
 }
 
 export interface BotActivityEvent {
-  kind: 'routine' | 'message_sent' | 'message_received' | 'group' | 'unreachable' | 'file_changed' | 'file_edited'
+  kind:
+    | 'routine'
+    | 'message_sent'
+    | 'message_received'
+    | 'group'
+    | 'unreachable'
+    | 'file_changed'
+    | 'file_edited'
+    | 'setting_changed'
   label: string
-  // What a message between bots said.
+  // What a message between bots said, or what a setting now holds.
   text?: string
 }
 

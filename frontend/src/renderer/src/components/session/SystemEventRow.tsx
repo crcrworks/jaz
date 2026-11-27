@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, BookOpen, CalendarPlus, CircleAlert, Clock3, type LucideIcon, PenLine, Users } from 'lucide-react'
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, BookOpen, CalendarPlus, CircleAlert, Clock3, type LucideIcon, PenLine, SlidersHorizontal, Users } from 'lucide-react'
 import { agentLabel } from '@/lib/agentLabel'
 import type { BotActivityEvent, SessionEvent } from '@/lib/api/types'
 
@@ -10,6 +10,7 @@ const ACTIVITY: Record<BotActivityEvent['kind'], [LucideIcon, (label: string) =>
   unreachable: [CircleAlert, (label) => `Couldn't reach ${label}`],
   file_changed: [BookOpen, (label) => `Updated ${label}`],
   file_edited: [PenLine, (label) => `You edited ${label}`],
+  setting_changed: [SlidersHorizontal, (label) => `Changed ${label}`],
 }
 
 // What woke a bot, or what it set up, as one quiet centered line; with `onOpen`

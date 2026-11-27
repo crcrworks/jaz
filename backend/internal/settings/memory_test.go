@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/wins/jaz/backend/internal/acp"
+	"github.com/wins/jaz/backend/internal/modelcatalog"
 	"github.com/wins/jaz/backend/internal/provider"
 	sqlitestore "github.com/wins/jaz/backend/internal/storage/sqlite"
 )
@@ -195,4 +196,38 @@ func stringIn(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// The HTTP route and a bot's settings tool share this check, so it is the one
+// place that decides which memory agent Jaz will accept.
+func TestValidateMemorySettingsRejectsAgentsJazCannotRun(t *testing.T) {
+	agents := AgentDefaults{ACP: map[string]ACPAgentDefaults{
+		acp.AgentClaude: {Enabled: true, Model: "default"},
+		acp.AgentCodex:  {Enabled: false},
+	}}
+	caps := acp.ModelCapabilities{Catalog: modelcatalog.NewService(nil)}
+	for name, settings := range map[string]MemorySettings{
+		"unknown":  {Enabled: true, Agent: "devin"},
+		"built-in": {Enabled: true, Agent: acp.AgentJaz},
+		"disabled": {Enabled: true, Agent: acp.AgentCodex},
+	} {
+		if _, err := ValidateMemorySettings(settings, agents, caps, true); err == nil {
+			t.Fatalf("%s memory agent was accepted", name)
+		}
+	}
+	accepted, err := ValidateMemorySettings(MemorySettings{Enabled: true, Agent: " Claude "}, agents, caps, true)
+	if err != nil || accepted.Agent != acp.AgentClaude {
+		t.Fatalf("canonical agent = %+v, %v", accepted, err)
+	}
+	// An effort the agent's model does not advertise is refused when the
+	// caller asked for it, and dropped when it was inherited.
+	unsupported := MemorySettings{Enabled: true, Agent: acp.AgentOpenCode, Model: "z-ai/glm-5.2", ReasoningEffort: "max"}
+	openrouter := AgentDefaults{ACP: map[string]ACPAgentDefaults{acp.AgentOpenCode: {Enabled: true, ModelProvider: provider.ProviderOpenRouter}}}
+	if _, err := ValidateMemorySettings(unsupported, openrouter, caps, true); err == nil {
+		t.Fatal("unsupported effort was accepted")
+	}
+	dropped, err := ValidateMemorySettings(unsupported, openrouter, caps, false)
+	if err != nil || dropped.ReasoningEffort != "" {
+		t.Fatalf("inherited effort = %+v, %v", dropped, err)
+	}
 }

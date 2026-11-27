@@ -11,3 +11,18 @@ type Setting struct {
 	CreatedAtMs int64  `json:"created_at_ms"`
 	UpdatedAtMs int64  `json:"updated_at_ms"`
 }
+
+type SettingChange struct {
+	ID               int64  `json:"id"`
+	ThreadID         string `json:"thread_id"`
+	Actor            string `json:"actor"`
+	SettingKey       string `json:"setting_key"`
+	Scope            string `json:"scope"`
+	Risk             string `json:"risk"`
+	OldValue         string `json:"old_value"`
+	NewValue         string `json:"new_value"`
+	ApprovalRequired int64  `json:"approval_required"`
+	ApprovalResult   string `json:"approval_result"`
+	Error            string `json:"error"`
+	CreatedAtMs      int64  `json:"created_at_ms"`
+}

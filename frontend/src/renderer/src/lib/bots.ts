@@ -158,7 +158,7 @@ export function opensBotTurn(event: SessionEvent): boolean {
   return event.room_message?.speaker === 'user' || (!!event.bot_activity && !QUIET_ACTIVITY.has(event.bot_activity.kind))
 }
 
-const QUIET_ACTIVITY = new Set<BotActivityEvent['kind']>(['message_sent', 'file_changed', 'file_edited'])
+const QUIET_ACTIVITY = new Set<BotActivityEvent['kind']>(['message_sent', 'file_changed', 'file_edited', 'setting_changed'])
 
 export function botChat(
   messages: ChatMessage[],
