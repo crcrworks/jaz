@@ -45,7 +45,7 @@ func CanonicalAgentName(name string) string {
 
 func AgentSupportsCompact(name string) bool {
 	switch CanonicalAgentName(name) {
-	case AgentCodex, AgentClaude:
+	case AgentCodex, AgentClaude, AgentDevin:
 		return true
 	default:
 		return false
