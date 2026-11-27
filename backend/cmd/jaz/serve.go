@@ -338,6 +338,7 @@ func startServer(
 		loops.WithScope(botService.BotOf),
 	)
 	jazTools.SetBots(bots.NewMCPTools(botService))
+	jazTools.SetSettings(app.NewSettingAuth(store, botService, events, manager))
 	handler.Routes = append(handler.Routes, app.BotRoutes(botsapi.NewHandler(botService, events))...)
 	handler.PublicRoutes = append(handler.PublicRoutes, app.HookRoute(hooksapi.NewHandler(loopService)))
 	handler.RoutineOwner = botService.RoutineOwner

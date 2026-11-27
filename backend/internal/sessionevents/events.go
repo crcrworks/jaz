@@ -172,13 +172,16 @@ type LoopCreatedEvent struct {
 
 // BotActivityEvent is a one-line row in a bot's thread naming what woke the
 // bot or what it did: a routine, a message to or from another bot, a group
-// chat turn, or a change to its AGENTS.md or MEMORY.md.
+// chat turn, a change to its AGENTS.md or MEMORY.md, or a setting it changed.
 type BotActivityEvent struct {
 	Kind  string `json:"kind"`
 	Label string `json:"label"`
-	// Text is what a message between bots said.
+	// Text is what a message between bots said, or what a setting now holds.
 	Text string `json:"text,omitempty"`
 }
+
+// BotActivitySettingChanged marks a setting a bot changed in its own chat.
+const BotActivitySettingChanged = "setting_changed"
 
 // RoomMessageEvent is one message in a group chat, spoken by the user or a
 // member bot.

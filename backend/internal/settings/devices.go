@@ -36,12 +36,20 @@ func LoadDeviceSettings(store storage.SettingsStorage) (DeviceSettings, error) {
 	return settings, err
 }
 
-func SaveDeviceSettings(store storage.SettingsStorage, settings DeviceSettings) (DeviceSettings, error) {
+func NormalizeDeviceSettings(settings DeviceSettings) (DeviceSettings, error) {
 	publicURL, err := normalizePublicURL(settings.PublicURL)
 	if err != nil {
 		return DeviceSettings{}, err
 	}
 	settings.PublicURL = publicURL
+	return settings, nil
+}
+
+func SaveDeviceSettings(store storage.SettingsStorage, settings DeviceSettings) (DeviceSettings, error) {
+	settings, err := NormalizeDeviceSettings(settings)
+	if err != nil {
+		return DeviceSettings{}, err
+	}
 	data, err := json.Marshal(settings)
 	if err != nil {
 		return DeviceSettings{}, err

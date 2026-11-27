@@ -21,6 +21,7 @@ import (
 	"github.com/wins/jaz/backend/internal/serverconfig"
 	"github.com/wins/jaz/backend/internal/sessionevents"
 	"github.com/wins/jaz/backend/internal/sessiongoal"
+	"github.com/wins/jaz/backend/internal/settingauth"
 	jazsettings "github.com/wins/jaz/backend/internal/settings"
 	"github.com/wins/jaz/backend/internal/storage"
 	"github.com/wins/jaz/backend/internal/threads"
@@ -78,6 +79,7 @@ type Service struct {
 	pluginStore     *plugins.Store
 	visualizeTools  *visualize.Service
 	pluginTools     *plugins.MCPTools
+	settingsTools   *settingauth.MCPTools
 	widgetPublisher *widgets.SessionPublisher
 	sessions        sessionSource
 
@@ -212,6 +214,12 @@ func (s *Service) SetThreads(service *threads.Service) {
 	s.syncThreadTools()
 }
 
+func (s *Service) SetSettings(tools *settingauth.MCPTools) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.settingsTools = tools
+}
+
 func (s *Service) Server() *mcp.Server {
 	return s.server(threadSurface)
 }
@@ -282,6 +290,9 @@ func (s *Service) newServer(surface toolSurface) *mcp.Server {
 	}
 	if (surface == threadSurface || surface == botSurface || surface == canvasSurface) && s.goalTools != nil {
 		s.goalTools.AddTo(server)
+	}
+	if surface == botSurface && s.settingsTools != nil {
+		s.settingsTools.AddTo(server)
 	}
 	s.calendarTools.AddTo(server)
 	s.gmailTools.AddTo(server)

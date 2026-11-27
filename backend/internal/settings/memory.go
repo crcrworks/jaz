@@ -67,10 +67,15 @@ func LoadMemorySettings(store storage.SettingsStorage) (MemorySettings, error) {
 	}, nil
 }
 
-func SaveMemorySettings(store storage.SettingsStorage, settings MemorySettings) (MemorySettings, error) {
+func NormalizeMemorySettings(settings MemorySettings) MemorySettings {
 	settings.Agent = strings.TrimSpace(settings.Agent)
 	settings.Model = strings.TrimSpace(settings.Model)
 	settings.ReasoningEffort = strings.TrimSpace(settings.ReasoningEffort)
+	return settings
+}
+
+func SaveMemorySettings(store storage.SettingsStorage, settings MemorySettings) (MemorySettings, error) {
+	settings = NormalizeMemorySettings(settings)
 	data, err := json.Marshal(settings)
 	if err != nil {
 		return MemorySettings{}, err

@@ -28,6 +28,7 @@ import (
 	"github.com/wins/jaz/backend/internal/runtimefiles"
 	"github.com/wins/jaz/backend/internal/serverconfig"
 	"github.com/wins/jaz/backend/internal/sessionevents"
+	"github.com/wins/jaz/backend/internal/settingauth"
 	jazsettings "github.com/wins/jaz/backend/internal/settings"
 	"github.com/wins/jaz/backend/internal/storage"
 	sqlitestore "github.com/wins/jaz/backend/internal/storage/sqlite"
@@ -589,6 +590,7 @@ func TestBotOnlyToolsStayOnTheBotSurface(t *testing.T) {
 	)
 	service.SetLoops(loops.NewService(store, &fakeExecutor{started: make(chan loops.Run, 1)}, nil))
 	service.SetBots(bots.NewMCPTools(nil))
+	service.SetSettings(settingauth.NewMCPTools(nil))
 	for surface, botOnly := range map[toolSurface]bool{threadSurface: false, botSurface: true} {
 		session, closeSession := connectClient(t, service.server(surface))
 		if !hasTool(t, session, "message_bot") {
@@ -596,6 +598,9 @@ func TestBotOnlyToolsStayOnTheBotSurface(t *testing.T) {
 		}
 		if hasTool(t, session, "send_message") != botOnly {
 			t.Fatalf("surface %v advertises send_message = %v", surface, !botOnly)
+		}
+		if hasTool(t, session, "settings_list") != botOnly {
+			t.Fatalf("surface %v advertises settings_list = %v", surface, !botOnly)
 		}
 		closeSession()
 	}
