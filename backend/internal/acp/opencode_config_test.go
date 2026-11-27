@@ -104,3 +104,50 @@ func TestOpenCodeWritesThinkingOffVariant(t *testing.T) {
 		t.Fatalf("variants = %#v, want a none variant", content.Provider["openrouter"].Models["z-ai/glm-5.2"].Variants)
 	}
 }
+
+// OpenCode takes a model's thinking levels from the variants in its own
+// configuration, so a custom OpenAI-compatible provider needs the Jaz-selected
+// effort written there too; limiting variants to OpenRouter left among the
+// agent's levels and the turn ran on the model default while the thread showed
+// the chosen one.
+func TestOpenCodeWritesCustomProviderVariant(t *testing.T) {
+	providers := map[string]modelprovider.ModelProviderConfig{
+		"commandcode": {
+			Type:         "openai-compatible",
+			BaseURL:      "https://commandcode.example/v1",
+			APIKey:       "commandcode-key",
+			Capabilities: []string{modelprovider.CapabilityChatCompletions},
+		},
+	}
+	manager := NewManager(nil, Config{Root: t.TempDir(), Providers: providers}, nil)
+	cfg := AgentConfig{
+		ProviderMode:    AgentProviderModeAgentDefaults,
+		ModelProvider:   "commandcode",
+		Model:           "deepseek/deepseek-v4.1-flash",
+		ReasoningEffort: "medium",
+	}
+	env, err := manager.openCodeTestEnv(t, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var content openCodeConfigContent
+	if err := json.Unmarshal([]byte(env["OPENCODE_CONFIG_CONTENT"]), &content); err != nil {
+		t.Fatal(err)
+	}
+	variant, ok := content.Provider["commandcode"].Models["deepseek/deepseek-v4.1-flash"].Variants["medium"]
+	if !ok || variant.Reasoning == nil || variant.Reasoning.Effort != "medium" {
+		t.Fatalf("custom provider variants = %#v, want a medium variant", content.Provider["commandcode"].Models)
+	}
+}
+
+// A model entry Jaz did not describe belongs to the user's own OpenCode
+// configuration, so Jaz adds no variant to it.
+func TestOpenCodeLeavesUndescribedProviderAlone(t *testing.T) {
+	content := openCodeConfigContent{Provider: map[string]openCodeProviderConfig{
+		"mine": {Models: map[string]openCodeModelConfig{"other": {}}},
+	}}
+	addOpenCodeReasoningVariant(&content, "mine/chat", "high")
+	if len(content.Provider["mine"].Models["chat"].Variants) != 0 {
+		t.Fatalf("variant added to a model Jaz does not describe: %#v", content.Provider["mine"].Models)
+	}
+}

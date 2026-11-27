@@ -222,7 +222,9 @@ func TestUnadvertisedModelPolicyPerAgent(t *testing.T) {
 }
 
 // OpenCode keeps a thinking level per model, so a level the configured model
-// does not offer is dropped for that session rather than failing the start.
+// does not offer is dropped for that session rather than failing the start; the
+// drop reaches the thread as a notice instead of passing as the configured
+// level.
 func TestOpenCodeDropsAnEffortTheModelDoesNotOffer(t *testing.T) {
 	options := sessionConfigOptionsState{
 		configOptionsPresent: true,
@@ -231,15 +233,19 @@ func TestOpenCodeDropsAnEffortTheModelDoesNotOffer(t *testing.T) {
 		effortOptions:        []string{"low", "high"},
 	}
 	manager := &Manager{log: log.New(io.Discard)}
-	if raw, err := manager.applyConfiguredReasoningEffort(t.Context(), nil, AgentOpenCode, "session", "model", "xhigh", options, false); err != nil || raw != nil {
+	raw, notice, err := manager.applyConfiguredReasoningEffort(t.Context(), nil, AgentOpenCode, "session", "model", "xhigh", options, false)
+	if err != nil || raw != nil {
 		t.Fatalf("opencode unsupported effort = %v, %v", raw, err)
+	}
+	if !strings.Contains(notice, "xhigh") || !strings.Contains(notice, "high, low") {
+		t.Fatalf("unsupported effort notice = %q, want the level and what the model offers", notice)
 	}
 	// Thinking off is the agent's own level, not one the model lists, so a model
 	// without it must not stop the session from turning thinking off.
-	if raw, err := manager.applyConfiguredReasoningEffort(t.Context(), nil, AgentOpenCode, "session", "model", "none", options, false); err != nil || raw != nil {
-		t.Fatalf("opencode none = %v, %v", raw, err)
+	if raw, notice, err := manager.applyConfiguredReasoningEffort(t.Context(), nil, AgentOpenCode, "session", "model", "none", options, false); err != nil || raw != nil || notice != "" {
+		t.Fatalf("opencode none = %v, %q, %v", raw, notice, err)
 	}
-	if _, err := manager.applyConfiguredReasoningEffort(t.Context(), nil, AgentClaude, "session", "model", "xhigh", options, false); err == nil {
+	if _, _, err := manager.applyConfiguredReasoningEffort(t.Context(), nil, AgentClaude, "session", "model", "xhigh", options, false); err == nil {
 		t.Fatal("claude must still refuse an effort its model does not advertise")
 	}
 }

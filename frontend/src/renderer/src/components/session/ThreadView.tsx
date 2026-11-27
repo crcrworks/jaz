@@ -9,6 +9,7 @@ import { BottomDock } from '@/components/session/BottomDock'
 import { UserBubble } from '@/components/session/Bubble'
 import { Composer, PlanDecisionCard } from '@/components/session/Composer'
 import { NativeModelOptions } from '@/components/session/NativeModelOptions'
+import { SessionNotices } from '@/components/session/SessionNotices'
 import { useSessionConfig } from '@/components/session/useSessionConfig'
 import { SelectionContextToolbar } from '@/components/session/SelectionContextToolbar'
 import { useComposerContexts } from '@/components/session/useComposerContexts'
@@ -685,6 +686,7 @@ export function ThreadView({
               onHeightChange={setBottomDockHeight}
             >
               <VoiceMode voice={voice} face={voice.bot?.avatar ?? null} />
+              <SessionNotices notices={derived.agentSession?.notices} />
               {showPlanDecision ? (
                 <PlanDecisionCard
                   pending={planDecisionPending}
