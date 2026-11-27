@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
-	"github.com/wins/jaz/backend/internal/pirpc"
 	"github.com/wins/jaz/backend/internal/processenv"
 	"github.com/wins/jaz/backend/internal/runtimefiles"
 )
@@ -21,29 +23,59 @@ func resolvePiAuth(cfg AgentConfig, root string, env map[string]string) resolved
 		StoragePath: runtimefiles.New(root).ACPPiHome,
 		Source:      AuthModeExistingCLI,
 	}
-	authType, reason, ok := piAuthCheck(env, piModelPattern(cfg))
-	if reason != "" {
-		status.Reason = reason
+	providers := piAuthProviders(status.StoragePath)
+	if len(providers) == 0 {
+		status.Reason = "sign in to pi with `pi auth login <provider>` in its Jaz profile"
 		return status
 	}
-	status.Kind = AuthKindAPIKey
-	if authType == "oauth" {
-		status.Kind = AuthKindOAuth
-	}
-	if ok {
+	if model := piModelPattern(cfg); model != "" {
+		authType, reason, ok := piAuthCheck(env, model)
+		if reason != "" {
+			status.Reason = reason
+			return status
+		}
+		if !ok {
+			status.Reason = "sign in to pi with `pi auth login <provider>` in its Jaz profile"
+			return status
+		}
+		status.Kind = AuthKindAPIKey
+		if authType == "oauth" {
+			status.Kind = AuthKindOAuth
+		}
 		status.Evidence = "pi auth check"
 		status.markAuthenticated("pi_auth_check", status.Kind)
+		return status
 	}
+	status.Evidence = "auth.json"
+	status.markAuthenticated("auth_json", AuthKindOAuth)
 	return status
 }
 
-// piModelPattern names the model pi should judge its credentials against: the
-// configured one, or the model pi itself would start with.
-func piModelPattern(cfg AgentConfig) string {
-	if model := strings.TrimSpace(cfg.ProviderQualifiedModel()); model != "" {
-		return model
+// piAuthProviders lists the providers pi holds credentials for. Jaz reads only
+// which providers exist in pi's own auth file, never the secrets.
+func piAuthProviders(home string) []string {
+	data, err := os.ReadFile(filepath.Join(home, "auth.json"))
+	if err != nil {
+		return nil
 	}
-	return ""
+	var stored map[string]json.RawMessage
+	if json.Unmarshal(data, &stored) != nil {
+		return nil
+	}
+	providers := make([]string, 0, len(stored))
+	for provider := range stored {
+		if strings.TrimSpace(provider) != "" {
+			providers = append(providers, provider)
+		}
+	}
+	sort.Strings(providers)
+	return providers
+}
+
+// piModelPattern names the model pi should judge its credentials against. pi
+// names models "provider/id" itself, so the configured id is passed through.
+func piModelPattern(cfg AgentConfig) string {
+	return strings.TrimSpace(cfg.Model)
 }
 
 // piAuthCheck runs `pi auth check` in the isolated profile and returns what pi
@@ -54,12 +86,7 @@ func piAuthCheck(env map[string]string, model string) (authType, reason string, 
 	if err != nil {
 		return "", "pi executable not found; install pi on the Jaz server", false
 	}
-	args := []string{"auth", "check", "--json"}
-	if model != "" {
-		args = append(args, "--model", model)
-	} else {
-		return "", "", false
-	}
+	args := []string{"auth", "check", "--json", "--model", model}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, command, args...)
@@ -108,19 +135,13 @@ func piLoginInvocation(root string) AgentLoginInvocation {
 	}
 }
 
-func disconnectPiAuth(ctx context.Context, cfg AgentConfig, root string) error {
-	command, err := ResolveExecutable(AgentPi)
-	if err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, command, "auth", "logout", strings.TrimSpace(cfg.ModelProvider))
-	cmd.Env = processenv.List(piProfileEnv(root))
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("pi sign out: %w", err)
-	}
-	return nil
-}
 
-var _ = pirpc.CheckInstalled
+// PreparePiProfile creates the isolated pi profile a thread runs in, so a
+// person can sign pi in there before any thread exists.
+func PreparePiProfile(root string) (string, error) {
+	home := runtimefiles.New(root).ACPPiHome
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		return "", err
+	}
+	return home, nil
+}

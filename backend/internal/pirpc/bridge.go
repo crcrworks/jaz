@@ -27,10 +27,14 @@ type Config struct {
 // the first ACP session call tells the bridge which pi session to run.
 func OpenACPConn(ctx context.Context, cfg Config) jsonrpc.MessageConn {
 	clientConn, serverConn := jsonrpc.Pipe(64)
-	bridge := &acpBridge{cfg: cfg, sessions: map[string]*bridgeSession{}}
+	// A thread's pi process outlives the call that opened it, so it runs on its
+	// own context, ended when the bridge itself ends.
+	runCtx, stop := context.WithCancel(context.WithoutCancel(ctx))
+	bridge := &acpBridge{cfg: cfg, sessions: map[string]*bridgeSession{}, runCtx: runCtx, stop: stop}
 	bridge.peer = jsonrpc.NewPeer(serverConn, bridge)
 	go func() {
 		defer serverConn.Close()
+		defer stop()
 		_ = bridge.peer.Serve(ctx)
 	}()
 	return clientConn
@@ -39,6 +43,9 @@ func OpenACPConn(ctx context.Context, cfg Config) jsonrpc.MessageConn {
 type acpBridge struct {
 	cfg  Config
 	peer *jsonrpc.Peer
+
+	runCtx context.Context
+	stop   context.CancelFunc
 
 	mu       sync.Mutex
 	sessions map[string]*bridgeSession
@@ -158,7 +165,7 @@ func (b *acpBridge) start(ctx context.Context, metaPrompt, sessionID, cwd string
 	if err != nil {
 		return nil, err
 	}
-	client, err := Start(ctx, launch)
+	client, err := Start(b.runCtx, launch)
 	if err != nil {
 		return nil, err
 	}
@@ -201,10 +208,10 @@ func (b *acpBridge) handlePrompt(ctx context.Context, raw json.RawMessage) (json
 	if err != nil {
 		return nil, jsonrpc.InvalidParams(err.Error(), nil)
 	}
-	session.client.drain()
 	if isCompactPrompt(message) {
-		return b.compact(ctx, session, req.SessionID)
+		return b.compact(ctx, session)
 	}
+	session.client.drain()
 	if err := session.client.Call(ctx, "prompt", map[string]any{"message": message}, nil); err != nil {
 		return nil, mapBridgeError(err)
 	}
@@ -216,8 +223,7 @@ func (b *acpBridge) handlePrompt(ctx context.Context, raw json.RawMessage) (json
 }
 
 // compact runs pi's own compaction. Jaz never writes a summary of its own.
-func (b *acpBridge) compact(ctx context.Context, session *bridgeSession, sessionID acpschema.SessionID) (json.RawMessage, *jsonrpc.Error) {
-	session.client.drain()
+func (b *acpBridge) compact(ctx context.Context, session *bridgeSession) (json.RawMessage, *jsonrpc.Error) {
 	var result struct {
 		TokensBefore int `json:"tokensBefore"`
 	}
@@ -228,7 +234,8 @@ func (b *acpBridge) compact(ctx context.Context, session *bridgeSession, session
 		}
 		return nil, mapBridgeError(err)
 	}
-	session.client.settled(ctx)
+	// A compaction is pi's own run with its own start and end events; the
+	// command's answer is the whole of it, so no agent_settled follows.
 	return jsonrpc.EncodeResult(acpschema.PromptResponse{StopReason: acpschema.StopReasonEndTurn})
 }
 

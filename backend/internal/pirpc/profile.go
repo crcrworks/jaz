@@ -26,6 +26,9 @@ func NewProfile(root string) Profile {
 }
 
 type sessionFiles struct {
+	// Session is the pi session file the thread's history lives in. pi reopens
+	// it from this path, so a restart keeps the conversation and its cwd.
+	Session   string
 	Prompt    string
 	Extension string
 }
@@ -33,6 +36,7 @@ type sessionFiles struct {
 func (p Profile) sessionFiles(id string) sessionFiles {
 	dir := filepath.Join(p.Sessions, safeSessionName(id))
 	return sessionFiles{
+		Session:   filepath.Join(dir, "session.jsonl"),
 		Prompt:    filepath.Join(dir, "append-prompt.md"),
 		Extension: filepath.Join(dir, "mcp.ts"),
 	}
@@ -70,10 +74,10 @@ const mcpToolNameNote = `Jaz's own tools reach you over MCP and are named mcp__<
 // MCP client instead of replacing either.
 func (p Profile) launch(cfg Config, sessionID, cwd, systemPrompt string, servers []MCPServer) (Launch, error) {
 	files := p.sessionFiles(sessionID)
-	if err := os.MkdirAll(filepath.Dir(files.Prompt), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(files.Session), 0o700); err != nil {
 		return Launch{}, err
 	}
-	args := []string{"--mode", "rpc", "--no-approve", "--no-prompt-templates"}
+	args := []string{"--mode", "rpc", "--session", files.Session, "--no-approve", "--no-prompt-templates"}
 	prompt := strings.TrimSpace(systemPrompt)
 	if len(servers) > 0 {
 		prompt = strings.TrimSpace(prompt + "\n\n" + mcpToolNameNote)
@@ -95,12 +99,29 @@ func (p Profile) launch(cfg Config, sessionID, cwd, systemPrompt string, servers
 	return Launch{Command: cfg.Command, Args: args, Env: cfg.Env, Cwd: cwd}, nil
 }
 
+// mcpServerName reports whether pi accepts a server name: letters, digits, "_"
+// and "-", and no blank.
+func mcpServerName(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		switch {
+		case unicode.IsLetter(r), unicode.IsDigit(r), r == '_', r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // mcpExtension registers Jaz's servers with pi's built-in MCP client. They are
 // `direct` because Jaz's platform prompt names their tools outright.
 func mcpExtension(servers []MCPServer) (string, error) {
 	lines := make([]string, 0, len(servers))
 	for _, server := range servers {
-		if strings.TrimSpace(server.URL) == "" {
+		if strings.TrimSpace(server.URL) == "" || !mcpServerName(server.Name) {
 			continue
 		}
 		config, err := json.Marshal(map[string]any{

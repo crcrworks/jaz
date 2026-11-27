@@ -16,15 +16,9 @@ import (
 // Jaz's MCP servers, which pi takes through its own client.
 func (m *Manager) piBridgeConfig(cfg AgentConfig) pirpc.Config {
 	root := m.cfg.Root
-	command := cfg.Command
-	if strings.TrimSpace(command) == "" {
-		if resolved, err := ResolveExecutable(AgentPi); err == nil {
-			command = resolved
-		}
-	}
 	env := m.probeEnv(AgentPi, cfg)
 	return pirpc.Config{
-		Command: command,
+		Command: piCommand(cfg),
 		Env:     env,
 		Profile: pirpc.NewProfile(root),
 		Prompt: func(ctx context.Context, cwd string) (string, error) {
@@ -64,7 +58,7 @@ func piMCPServers(ctx context.Context, store mcpconfig.ServerReader) ([]pirpc.MC
 // piModels reports pi's own model metadata for a Settings thread's picker.
 func (m *Manager) piModels(ctx context.Context, cfg AgentConfig) (pirpc.ModelCatalog, error) {
 	return pirpc.DiscoverModels(ctx, pirpc.Config{
-		Command: cfg.Command,
+		Command: piCommand(cfg),
 		Env:     m.probeEnv(AgentPi, cfg),
 		Profile: pirpc.NewProfile(m.cfg.Root),
 	})
@@ -93,4 +87,27 @@ func (m *Manager) piModelCatalog(ctx context.Context, cfg AgentConfig) (AgentMod
 		})
 	}
 	return result, nil
+}
+
+// piCommand is the pi executable a thread runs: the one its configuration or
+// JAZ_PI_COMMAND names, else the pi on the server's PATH.
+func piCommand(cfg AgentConfig) string {
+	if command := strings.TrimSpace(cfg.Env["JAZ_PI_COMMAND"]); command != "" {
+		return command
+	}
+	resolved, err := ResolveExecutable(AgentPi)
+	if err != nil {
+		return ""
+	}
+	return resolved
+}
+
+// ProbePiEnv is the environment a pi process for this agent runs with. It is
+// the same set a thread uses, so a Settings probe reads the real profile.
+func (m *Manager) ProbePiEnv(agent string) (map[string]string, error) {
+	cfg, ok, err := m.configuredAgent(agent)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return m.processEnvPrepared(agent, cfg)
 }
