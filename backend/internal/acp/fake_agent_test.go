@@ -57,6 +57,13 @@ func TestFakeACPAgentProcess(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// A CLI that takes Jaz's prompt as a file records the directory it was
+	// launched with, so the view and the prompt can be checked together.
+	if dir := os.Getenv("JAZ_FAKE_ACP_CODEXIUM_CAPTURE"); dir != "" {
+		if err := os.WriteFile(filepath.Join(dir, "codeium"), []byte(os.Getenv("WINDSURF_CODEIUM_DIR")), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if os.Getenv("JAZ_FAKE_ACP_MUSE_SHUTDOWN_CAPTURE") != "" {
 		signal.Ignore(syscall.SIGTERM)
 	}
@@ -346,6 +353,12 @@ func TestFakeACPAgentProcess(t *testing.T) {
 				resp, _ := jsonrpc.NewErrorResponse(*msg.ID, jsonrpc.InvalidParams(err.Error(), nil))
 				_ = conn.Send(context.Background(), resp)
 				continue
+			}
+			if dir := os.Getenv("JAZ_FAKE_ACP_CODEXIUM_CAPTURE"); dir != "" {
+				prompt, _ := req.Meta["systemPrompt"].(string)
+				if err := os.WriteFile(filepath.Join(dir, "system-prompt"), []byte(prompt), 0o600); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if want := os.Getenv("JAZ_FAKE_ACP_SYSTEM_PROMPT"); want != "" && req.Meta["systemPrompt"] != want {
 				resp, _ := jsonrpc.NewErrorResponse(*msg.ID, jsonrpc.InvalidParams("missing system prompt", nil))

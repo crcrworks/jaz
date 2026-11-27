@@ -128,6 +128,8 @@ func AgentLoginInvocationFor(name, root string, auth AgentAuthConfig, binDir str
 	case AgentMuse:
 		probeEnv := NewManager(nil, Config{Root: root, Env: env}, nil).probeEnv(name, AgentConfig{LoginBinDir: binDir})
 		return museLoginInvocation(probeEnv)
+	case AgentDevin:
+		return loginInvocation(nil, true, binDir, "devin", "auth", "login")
 	case AgentAntigravity:
 		executable, err := antigravityExecutable(binDir)
 		if err != nil {

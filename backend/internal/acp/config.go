@@ -24,6 +24,7 @@ const (
 	AgentAntigravity      = "antigravity"
 	AgentMuse             = "muse"
 	AgentCopilot          = "copilot"
+	AgentDevin            = "devin"
 	AgentMicrosoftCopilot = m365copilot.AgentName
 
 	AgentProviderModeNone          = ""
@@ -87,6 +88,8 @@ func promptWithModules(base string, modules promptmodule.Modules) string {
 //     use this session metadata path.
 //   - kimi (Jaz fork) appends a _meta.systemPrompt string to its native system
 //     prompt without persisting it in conversation history.
+//   - devin reads always-on rules from WINDSURF_CODEIUM_DIR and never a session
+//     _meta prompt, so the prompt rides its rules file instead.
 //
 // Unknown agents get the codex-style bare string.
 func systemPromptMeta(agent, prompt string, fresh bool) map[string]any {
@@ -101,6 +104,8 @@ func systemPromptMeta(agent, prompt string, fresh bool) map[string]any {
 		return map[string]any{"rules": prompt}
 	case AgentAntigravity:
 		return map[string]any{"antigravity": map[string]any{"systemPrompt": map[string]any{"append": prompt}}}
+	case AgentDevin:
+		return nil
 	default:
 		return map[string]any{"systemPrompt": prompt}
 	}
@@ -314,6 +319,7 @@ var builtinAgentOrder = []string{
 	AgentAntigravity,
 	AgentMuse,
 	AgentCopilot,
+	AgentDevin,
 	AgentMicrosoftCopilot,
 }
 
@@ -359,6 +365,10 @@ func BuiltinAgents() AgentCatalog {
 		AgentCopilot: {
 			ManagedAdapter:     "copilot",
 			ManagedAdapterArgs: []string{"--acp", "--stdio"},
+		},
+		AgentDevin: {
+			Command: "devin",
+			Args:    []string{"acp"},
 		},
 		AgentMicrosoftCopilot: {
 			BuiltinBridge: true,

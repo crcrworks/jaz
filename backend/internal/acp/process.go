@@ -137,6 +137,8 @@ func (m *Manager) openConn(ctx context.Context, name string, cfg AgentConfig, en
 		cleanup, err = configureMusePrompt(env, systemPrompt)
 	case AgentCopilot:
 		cleanup, err = configureCopilotPrompt(m.cfg.Root, env, systemPrompt)
+	case AgentDevin:
+		cleanup, err = configureDevinPrompt(env, systemPrompt)
 	case AgentOpenCode:
 		cleanup, err = m.configureOpenCode(env, cfg, systemPrompt)
 	}
@@ -319,6 +321,10 @@ func (m *Manager) buildProcessEnv(name string, agent AgentConfig, prepare bool) 
 	if name == AgentMuse {
 		addPathDirsToPath(env, agent.LoginBinDir)
 		prepareMuseEnv(root, env)
+	}
+	if name == AgentDevin {
+		addPathDirsToPath(env, agent.LoginBinDir)
+		prepareDevinEnv(env)
 	}
 	if name == AgentCodex {
 		delete(env, codexModelMetadataEnv)

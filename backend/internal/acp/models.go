@@ -181,6 +181,14 @@ func agentPolicyForAgent(agentName string) agentPolicy {
 			systemPromptAtLaunch: true,
 			unadvertisedModel:    unadvertisedModelRejected,
 		}
+	case AgentDevin:
+		// Devin owns its modes and its model/thought level options; every value
+		// it offers is its own, and it refuses ids it does not list.
+		return agentPolicy{
+			modelConfigID:        sessionConfigModel,
+			systemPromptAtLaunch: true,
+			unadvertisedModel:    unadvertisedModelRejected,
+		}
 	case AgentMicrosoftCopilot:
 		return agentPolicy{}
 	default:
