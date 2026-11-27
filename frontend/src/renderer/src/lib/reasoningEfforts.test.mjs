@@ -196,6 +196,25 @@ describe('modelReasoningSelection', () => {
     expect(modelReasoningSelection({ ...input, settings: openCodeSettings, agent: 'opencode', catalog, requested: 'none' }).effectiveEffort).toBe('none')
     expect(modelReasoningSelection({ ...input, settings: openCodeSettings, agent: 'opencode', catalog, requested: '' }).effectiveEffort).toBe('')
   })
+
+  // The session keeps `none` on a model that does not list it, so the UI must
+  // keep showing it rather than claiming the turn runs at another level.
+  test('keeps none for a model whose levels omit it', () => {
+    const selection = modelReasoningSelection({
+      ...input,
+      settings: openCodeSettings,
+      agent: 'opencode',
+      model: 'z-ai/glm-5.2',
+      requested: 'none',
+      catalog: {
+        status: 'ready',
+        suggestions: [{ value: 'z-ai/glm-5.2', label: 'GLM 5.2', reasoning: { status: 'ready', efforts: ['low', 'medium', 'high'] } }],
+      },
+    })
+
+    expect(selection.effectiveEffort).toBe('none')
+    expect(selection.supported).toBeTrue()
+  })
 })
 
 describe('withConfiguredEffort', () => {

@@ -143,6 +143,11 @@ func (c ModelCapabilities) ValidateReasoningEffort(agent, providerID, model, eff
 	if effort == "" {
 		return nil
 	}
+	// An agent that names "none" among its levels means thinking off by it, and
+	// no model has to offer that level for the switch to work.
+	if effort == "none" && agentPolicyForAgent(agent).supportsReasoningEffort("none") {
+		return nil
+	}
 	models, err := c.reasoningCapabilityModels(agent, providerID)
 	if err != nil {
 		return err
@@ -170,9 +175,14 @@ func (c ModelCapabilities) ValidateReasoningEffort(agent, providerID, model, eff
 
 // sessionReasoningEffort returns the effort a session starts with. An agent
 // that keeps an effort per model, as OpenCode does, skips one that model does
-// not offer instead of refusing to start over it.
+// not offer instead of refusing to start over it. Its own "none" is thinking
+// off rather than a level a model offers, so no model's list drops it.
 func (c ModelCapabilities) sessionReasoningEffort(agent, providerID, model, effort string) string {
-	if effort == "" || !agentPolicyForAgent(agent).effortsPerModel {
+	policy := agentPolicyForAgent(agent)
+	if effort == "" || !policy.effortsPerModel {
+		return effort
+	}
+	if effort == "none" && policy.supportsReasoningEffort("none") {
 		return effort
 	}
 	models, err := c.reasoningCapabilityModels(agent, providerID)

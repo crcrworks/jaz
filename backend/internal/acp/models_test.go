@@ -234,6 +234,11 @@ func TestOpenCodeDropsAnEffortTheModelDoesNotOffer(t *testing.T) {
 	if raw, err := manager.applyConfiguredReasoningEffort(t.Context(), nil, AgentOpenCode, "session", "model", "xhigh", options, false); err != nil || raw != nil {
 		t.Fatalf("opencode unsupported effort = %v, %v", raw, err)
 	}
+	// Thinking off is the agent's own level, not one the model lists, so a model
+	// without it must not stop the session from turning thinking off.
+	if raw, err := manager.applyConfiguredReasoningEffort(t.Context(), nil, AgentOpenCode, "session", "model", "none", options, false); err != nil || raw != nil {
+		t.Fatalf("opencode none = %v, %v", raw, err)
+	}
 	if _, err := manager.applyConfiguredReasoningEffort(t.Context(), nil, AgentClaude, "session", "model", "xhigh", options, false); err == nil {
 		t.Fatal("claude must still refuse an effort its model does not advertise")
 	}

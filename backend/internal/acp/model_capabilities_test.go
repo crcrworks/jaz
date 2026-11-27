@@ -259,3 +259,22 @@ func TestModelCapabilitiesDropsAnEffortTheNewModelLacks(t *testing.T) {
 		t.Fatalf("claude effort = %q, want it validated rather than dropped", effort)
 	}
 }
+
+// "none" is thinking off for an agent that names it among its levels, which no
+// model has to list; the UI keeps it and so does the session.
+func TestModelCapabilitiesKeepsNoneForAgentsThatNameIt(t *testing.T) {
+	capabilities := ModelCapabilities{Catalog: capabilityCatalog{providers: map[string][]modelcatalog.Model{
+		provider.ProviderOpenAI: {{Value: "model", Reasoning: modelcatalog.Reasoning{Status: modelcatalog.ReasoningReady, Efforts: []string{"low", "medium", "high"}}}},
+	}}}
+	if err := capabilities.ValidateReasoningEffort(AgentOpenCode, provider.ProviderOpenAI, "model", "none"); err != nil {
+		t.Fatal(err)
+	}
+	if effort := capabilities.sessionReasoningEffort(AgentOpenCode, provider.ProviderOpenAI, "model", "none"); effort != "none" {
+		t.Fatalf("session effort = %q, want none kept so the session turns thinking off", effort)
+	}
+	// An agent without a none level means "clear the effort" by it, which
+	// normalization empties before an effort reaches validation.
+	if got, err := NormalizeAgentReasoningEffort(AgentClaude, "none"); err != nil || got != "" {
+		t.Fatalf("claude none = %q, %v; want the effort cleared", got, err)
+	}
+}
