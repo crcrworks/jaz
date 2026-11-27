@@ -310,7 +310,7 @@ func (s *Service) next(bot Bot, target Entry, input UpdateInput) (json.RawMessag
 			// null is the inherited set, which a narrowed bot may not take
 			// back: that would add plugins rather than drop them.
 			if bot.Plugins != nil {
-				return nil, fmt.Errorf("%w: a bot cannot give itself plugins (inheriting every installed plugin)", ErrNotAllowed)
+				return nil, fmt.Errorf("%w: bot.plugins can only drop plugin ids; null would restore every installed plugin", ErrNotAllowed)
 			}
 			return value, nil
 		}
@@ -334,8 +334,10 @@ func (s *Service) next(bot Bot, target Entry, input UpdateInput) (json.RawMessag
 		if err != nil {
 			return nil, err
 		}
+		// Naming only the effort, or nothing at all, keeps the model the bot
+		// already runs with: this setting is never a way to clear a model.
 		if settings.Model == "" {
-			return nil, errors.New("bot.model needs a model name")
+			settings.Model = bot.Model
 		}
 		if settings.ReasoningEffort == "" {
 			settings.ReasoningEffort = bot.ReasoningEffort
@@ -380,9 +382,9 @@ func (s *Service) validate(target Entry, value json.RawMessage) (json.RawMessage
 	}
 	switch target.Key {
 	case "memory.settings":
-		var settings jazsettings.MemorySettings
-		if err := typedValue(value, &settings, target.Key); err != nil {
-			return nil, err
+		settings, err := jazsettings.ParseMemorySettings(value)
+		if err != nil {
+			return nil, fmt.Errorf("%s does not accept that value: %w", target.Key, err)
 		}
 		agents, err := s.deps.Agents()
 		if err != nil {
@@ -504,6 +506,14 @@ func (s *Service) applyBot(ctx context.Context, bot Bot, target Entry, value jso
 		model, err := modelValue(value)
 		if err != nil {
 			return err
+		}
+		if model.Model == "" {
+			// A bot on its agent's default model reads with no model, so
+			// writing that back changes nothing; an effort alone cannot be set.
+			if model.ReasoningEffort == "" {
+				return nil
+			}
+			return errors.New("bot.model needs a model name to go with that reasoning effort")
 		}
 		update.Model = &model.Model
 		update.ReasoningEffort = model.ReasoningEffort

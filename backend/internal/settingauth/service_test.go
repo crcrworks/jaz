@@ -485,3 +485,66 @@ func TestBotPluginsNullKeepsInheritance(t *testing.T) {
 		t.Fatalf("refused change still altered plugins: %v", *bot.Plugins)
 	}
 }
+
+// A memory setting saved by an older Jaz carries search_agent/dream_agent
+// instead of agent; reading it and writing it back must not drop the agent the
+// server actually runs.
+func TestMemoryLegacyAgentSurvivesRoundTrip(t *testing.T) {
+	approvals := &fakeApprovals{approve: true}
+	fixture := newSettingsFixture(t, approvals)
+	legacy := `{"enabled":true,"dream_agent":"claude","search_agent":"claude","model":"m1","reasoning_effort":""}`
+	if _, err := fixture.store.SaveSetting("memory", "settings", []byte(legacy)); err != nil {
+		t.Fatal(err)
+	}
+	view, err := fixture.service.Read(fixture.thread.ID, "memory.settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.update(UpdateInput{Key: "memory.settings", Value: view.Value}); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := jazsettings.LoadMemorySettings(fixture.store)
+	if err != nil || settings.Agent != "claude" || !settings.Enabled {
+		t.Fatalf("memory settings after round trip = %+v, %v", settings, err)
+	}
+}
+
+// A bot running its agent's default model reads with no model; writing that
+// back is a no-op rather than the error the round trip used to hit.
+func TestBotModelDefaultModelRoundTrips(t *testing.T) {
+	fixture := newSettingsFixture(t, &fakeApprovals{})
+	fixture.bots.bot.Model, fixture.bots.bot.ReasoningEffort = "", ""
+	view, err := fixture.service.Read(fixture.thread.ID, "bot.model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.update(UpdateInput{Key: "bot.model", Value: view.Value}); err != nil {
+		t.Fatalf("round trip on the agent's default model = %v", err)
+	}
+	if bot, _ := fixture.bots.Load(fixture.bot.ID); bot.Model != "" || bot.ReasoningEffort != "" {
+		t.Fatalf("default model round trip changed the bot: model=%q effort=%q", bot.Model, bot.ReasoningEffort)
+	}
+}
+
+// A memory effort is stored the way Jaz compares it, so the same value typed
+// in a different case is the same setting.
+func TestMemoryEffortIsStoredLowercased(t *testing.T) {
+	approvals := &fakeApprovals{approve: true}
+	fixture := newSettingsFixture(t, approvals)
+	if _, err := fixture.update(UpdateInput{Key: "memory.settings", Value: `{"enabled":true,"agent":"claude","reasoning_effort":"HIGH"}`}); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := jazsettings.LoadMemorySettings(fixture.store)
+	if err != nil || settings.ReasoningEffort != "high" {
+		t.Fatalf("stored effort = %q, %v", settings.ReasoningEffort, err)
+	}
+}
+
+func TestNarrowedPluginsRefusalExplainsItself(t *testing.T) {
+	fixture := newSettingsFixture(t, &fakeApprovals{})
+	fixture.bots.bot.Plugins = &[]string{"jaz-tools"}
+	_, err := fixture.update(UpdateInput{Key: "bot.plugins", Value: "null"})
+	if !errors.Is(err, ErrNotAllowed) || !strings.Contains(err.Error(), "null would restore every installed plugin") {
+		t.Fatalf("refusal = %v", err)
+	}
+}

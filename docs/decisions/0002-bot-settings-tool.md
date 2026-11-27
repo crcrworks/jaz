@@ -29,7 +29,9 @@ the typed fields (`prompt`, `name`, `agent`, `model`, `reasoning_effort`,
 is what the caller spelled out. `next` produces the one canonical value the
 change applies, so `settings_read` -> `settings_update` round trips every
 setting, `bot.model` included. A `bot.model` change may name the model alone;
-the reasoning effort it already runs with is then kept instead of cleared.
+the reasoning effort it already runs with is then kept instead of cleared, and
+a bot running its agent's default model reads with no model and writes that
+back as a no-op rather than an error.
 
 `needs_review` means the change opens an approval card, i.e. it is an editable
 app-global setting. `bot.plugins` and `bot.workspaces` carry `risk: permission`
@@ -55,6 +57,9 @@ own default; `settings_read` says so rather than repeating the default.
 
 Before a change is offered, `validate` reads an app-global value the way Jaz
 reads it back and returns the exact value that will be stored. Memory goes
+through `settings.ParseMemorySettings`, which is the same legacy
+`search_agent`/`dream_agent` merge `LoadMemorySettings` does, so a value saved
+by an older Jaz keeps its agent across a read and write. Memory goes
 through the same `settings.ValidateMemorySettings` the HTTP route uses, so an
 agent Jaz cannot start (unknown, disabled, the built-in `jaz`) and a reasoning
 effort its model does not accept are refused here too; devices run their URL
@@ -84,7 +89,10 @@ approval is not a plan and must not take over the plan panel.
 `bot.plugins` reads `null` while the bot inherits every installed plugin. That
 null round trips as long as the bot inherits; once narrowed, `null` would add
 every installed plugin back, so the tool refuses it as widening and the bot has
-to name the set it wants. Every attempt — including `current` read failures —
+to name the set it wants. The refusal reaches the bot service through
+`settingauth.BotUpdate.InheritPlugins`, which `internal/app/settings_tool.go`
+forwards as `bots.UpdateBot.InheritPlugins`; a test there runs the real bot
+service rather than a fake, because the fake is what hid the missing wiring. Every attempt — including `current` read failures —
 leaves an audit row, and a failure in the post-save follow-up is reported
 without a second row, because the value and its row are already stored.
 

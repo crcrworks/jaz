@@ -106,7 +106,8 @@ func (b settingAuthBots) Load(id string) (settingauth.Bot, error) {
 func (b settingAuthBots) Update(ctx context.Context, id string, input settingauth.BotUpdate) (settingauth.Bot, error) {
 	if _, err := b.service.Update(ctx, id, bots.UpdateBot{
 		Name: input.Name, Prompt: input.Prompt, Agent: input.Agent, Model: input.Model,
-		ReasoningEffort: input.ReasoningEffort, Plugins: input.Plugins, Workspaces: input.Workspaces,
+		ReasoningEffort: input.ReasoningEffort, InheritPlugins: input.InheritPlugins,
+		Plugins: input.Plugins, Workspaces: input.Workspaces,
 	}); err != nil {
 		return settingauth.Bot{}, err
 	}

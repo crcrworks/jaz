@@ -49,16 +49,12 @@ func (m MemorySettings) WorkerReasoningEffort(defaults AgentDefaults) string {
 	return WorkerAgentReasoningEffort(m.Agent, defaults)
 }
 
-func LoadMemorySettings(store storage.SettingsStorage) (MemorySettings, error) {
-	setting, err := store.LoadSetting(MemorySettingsNamespace, MemorySettingsKey)
-	if errors.Is(err, storage.ErrSettingNotFound) {
-		return DefaultMemorySettings(), nil
-	}
-	if err != nil {
-		return MemorySettings{}, err
-	}
+// ParseMemorySettings reads a stored memory value, including the older
+// search_agent/dream_agent fields, so a value written by any version reads the
+// same way back.
+func ParseMemorySettings(value []byte) (MemorySettings, error) {
 	var stored memorySettingsStorage
-	if err := json.Unmarshal(setting.Value, &stored); err != nil {
+	if err := json.Unmarshal(value, &stored); err != nil {
 		return MemorySettings{}, err
 	}
 	return MemorySettings{
@@ -69,6 +65,17 @@ func LoadMemorySettings(store storage.SettingsStorage) (MemorySettings, error) {
 	}, nil
 }
 
+func LoadMemorySettings(store storage.SettingsStorage) (MemorySettings, error) {
+	setting, err := store.LoadSetting(MemorySettingsNamespace, MemorySettingsKey)
+	if errors.Is(err, storage.ErrSettingNotFound) {
+		return DefaultMemorySettings(), nil
+	}
+	if err != nil {
+		return MemorySettings{}, err
+	}
+	return ParseMemorySettings(setting.Value)
+}
+
 // ValidateMemorySettings is the one check the HTTP route and a bot's settings
 // tool share: memory cannot run on an agent Jaz cannot start, and its reasoning
 // effort has to fit the model it will run. An inherited effort that no longer
@@ -76,6 +83,7 @@ func LoadMemorySettings(store storage.SettingsStorage) (MemorySettings, error) {
 func ValidateMemorySettings(settings MemorySettings, agents AgentDefaults, caps acp.ModelCapabilities, effortExplicit bool) (MemorySettings, error) {
 	settings = NormalizeMemorySettings(settings)
 	settings.Agent = acp.CanonicalAgentName(settings.Agent)
+	settings.ReasoningEffort = strings.ToLower(settings.ReasoningEffort)
 	if settings.Agent == "" {
 		return settings, nil
 	}
