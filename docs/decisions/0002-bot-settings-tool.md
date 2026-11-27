@@ -23,10 +23,20 @@ Each entry carries `scope`, `risk`, `secret`, `editable` and a description:
 | `agents.defaults`, `providers.custom`, `mcp.servers` | app-global | credential | yes | no |
 | `devices.settings` | app-global | sensitive | no | no |
 
-`SettingsUpdateInput` resolves `{"key": …, "value": "<json>"}` first and falls
-back to the typed fields (`prompt`, `name`, `agent`, `model`,
-`reasoning_effort`, `plugins`, `workspaces`). Arguments that disagree are read
-from `value`, which is what the caller spelled out.
+`UpdateInput` resolves `{"key": …, "value": "<json>"}` first and falls back to
+the typed fields (`prompt`, `name`, `agent`, `model`, `reasoning_effort`,
+`plugins`, `workspaces`); arguments that disagree are read from `value`, which
+is what the caller spelled out. `next` produces the one canonical value the
+change applies, so `settings_read` -> `settings_update` round trips every
+setting, `bot.model` included. A `bot.model` change may name the model alone;
+the reasoning effort it already runs with is then kept instead of cleared.
+
+`needs_review` means the change opens an approval card, i.e. it is an editable
+app-global setting. `bot.plugins` and `bot.workspaces` carry `risk: permission`
+but apply at once when narrowed, because narrowing only reduces reach.
+
+An app-global setting nobody has written yet reads as `null` and runs on Jaz's
+own default; `settings_read` says so rather than repeating the default.
 
 ## The three answers
 
@@ -42,6 +52,17 @@ from `value`, which is what the caller spelled out.
    reach: `bot.plugins` and `bot.workspaces` can only lose entries, so a bot
    cannot give itself a plugin, a workspace, or a wider seat for another or
    child bot. Those requests come back as errors, with no approval UI.
+
+Before a change is offered, `next` reads an app-global value as the typed
+settings it holds (`MemorySettings`, `BrowserSettings`, `ComputerSettings`,
+`DeviceSettings` plus its URL normalization). A value Jaz could not load back
+fails there, so a mistyped `{"enabled": "maybe"}` never reaches an approval card
+and never breaks the readers that load the setting on every turn.
+
+After an approved app-global change is stored, the settings tool runs the same
+follow-up the HTTP settings routes do — memory's scheduler start/stop, the
+computer backend closing when it is turned off, the jaztools sync, and an MCP
+refresh — through a `Dependencies.Applied` hook the app layer supplies.
 
 Approval option kinds are `approve`/`deny`, which is deliberately outside the
 `allow*`/`reject*` kinds the thread's plan-approval surface keys on: a settings

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/wins/jaz/backend/internal/sessionevents"
+	jazsettings "github.com/wins/jaz/backend/internal/settings"
 	"github.com/wins/jaz/backend/internal/storage"
 )
 
@@ -25,6 +26,11 @@ type Dependencies struct {
 	Bus       *sessionevents.Bus
 	Sessions  SessionReader
 	Approvals ApprovalRequester
+	// Applied runs the work Jaz does after an app-global setting is saved:
+	// memory's scheduler and tool sync, browser and computer tool resync.
+	// The settings tool writes the value itself, so whoever owns that work
+	// supplies it here.
+	Applied func(ctx context.Context, key string) error
 }
 
 type SessionReader interface {
@@ -73,7 +79,8 @@ func New(deps Dependencies) *Service {
 	return &Service{deps: deps}
 }
 
-// Info is one setting as the tools report it.
+// Info is one setting as the tools report it. NeedsReview means the change
+// opens an approval card; Editable means a bot may change it at all.
 type Info struct {
 	Key         string `json:"key"`
 	Scope       string `json:"scope"`
@@ -159,7 +166,9 @@ func (s *Service) Update(ctx context.Context, sessionID string, input UpdateInpu
 	}
 	target, ok := entry(input.Key)
 	if !ok {
-		return UpdateOutput{Key: input.Key}, fmt.Errorf("unknown setting: %s", input.Key)
+		err := fmt.Errorf("unknown setting: %s", input.Key)
+		s.audit(bot, Entry{Key: strings.TrimSpace(input.Key)}, storage.SettingChange{}, err)
+		return UpdateOutput{Key: strings.TrimSpace(input.Key)}, err
 	}
 	out := UpdateOutput{Key: target.Key}
 	if !target.Editable {
@@ -169,6 +178,10 @@ func (s *Service) Update(ctx context.Context, sessionID string, input UpdateInpu
 	}
 	next, err := s.next(bot, target, input)
 	if err != nil {
+		s.audit(bot, target, storage.SettingChange{}, err)
+		return out, err
+	}
+	if err := s.validate(target, next); err != nil {
 		s.audit(bot, target, storage.SettingChange{}, err)
 		return out, err
 	}
@@ -208,6 +221,11 @@ func (s *Service) Update(ctx context.Context, sessionID string, input UpdateInpu
 	}
 	out.Applied = true
 	out.Preview = change.NewValue
+	if target.appWide() && s.deps.Applied != nil {
+		if err := s.deps.Applied(ctx, target.Key); err != nil {
+			return out, fmt.Errorf("%s saved, but the change did not take effect yet: %w", target.Key, err)
+		}
+	}
 	s.note(bot, target, change)
 	return out, nil
 }
@@ -260,56 +278,100 @@ func currentBotValue(bot Bot, target Entry) (json.RawMessage, error) {
 	return json.Marshal(value)
 }
 
-// next reads the requested change as the value the setting will hold, and
-// refuses anything that would widen a bot's reach over other bots.
+// next is what the setting will hold once the change applies: the requested
+// value, kept in the shape apply stores. It refuses anything that would widen a
+// bot's reach over other bots.
 func (s *Service) next(bot Bot, target Entry, input UpdateInput) (json.RawMessage, error) {
-	if !target.scoped() {
-		return requestedValue(input, target)
+	value, err := requestedValue(input, target)
+	if err != nil {
+		return nil, err
 	}
 	switch target.Key {
-	case "bot.name", "bot.prompt", "bot.agent":
-		return requestedValue(input, target)
-	case "bot.model":
-		value, err := json.Marshal(map[string]string{
-			"model":            strings.TrimSpace(deref(input.Model, bot.Model)),
-			"reasoning_effort": strings.TrimSpace(input.ReasoningEffort),
-		})
-		return value, err
 	case "bot.plugins":
-		value, err := requestedValue(input, target)
+		wanted, err := stringList(value)
 		if err != nil {
-			return nil, err
-		}
-		var wanted []string
-		if err := json.Unmarshal(value, &wanted); err != nil {
 			return nil, errors.New("bot.plugins needs an array of plugin ids")
 		}
 		if added := missingFrom(wanted, currentPlugins(bot)); len(added) > 0 {
 			return nil, fmt.Errorf("%w: a bot cannot give itself plugins (%s)", ErrNotAllowed, strings.Join(added, ", "))
 		}
-		return value, nil
 	case "bot.workspaces":
-		value, err := requestedValue(input, target)
+		wanted, err := stringList(value)
 		if err != nil {
-			return nil, err
-		}
-		var wanted []string
-		if err := json.Unmarshal(value, &wanted); err != nil {
 			return nil, errors.New("bot.workspaces needs an array of paths")
 		}
 		if added := missingFrom(wanted, bot.Workspaces); len(added) > 0 {
 			return nil, fmt.Errorf("%w: a bot cannot widen its workspaces (%s)", ErrNotAllowed, strings.Join(added, ", "))
 		}
-		return value, nil
+	case "bot.model":
+		settings, err := modelValue(value)
+		if err != nil {
+			return nil, err
+		}
+		if settings.Model == "" {
+			return nil, errors.New("bot.model needs a model name")
+		}
+		if settings.ReasoningEffort == "" {
+			settings.ReasoningEffort = bot.ReasoningEffort
+		}
+		data, err := json.Marshal(settings)
+		return data, err
 	}
-	return nil, fmt.Errorf("unknown setting: %s", target.Key)
+	return value, nil
 }
 
-func deref(value *string, fallback string) string {
-	if value == nil {
-		return fallback
+// modelValue is what a bot.model change asks for: the model it names and,
+// optionally, the effort to run it with.
+type modelValueSettings struct {
+	Model           string `json:"model"`
+	ReasoningEffort string `json:"reasoning_effort"`
+}
+
+func modelValue(value json.RawMessage) (modelValueSettings, error) {
+	var settings modelValueSettings
+	if err := json.Unmarshal(value, &settings); err != nil {
+		return modelValueSettings{}, errors.New(`bot.model needs {"model": "...", "reasoning_effort": "..."}`)
 	}
-	return *value
+	settings.Model = strings.TrimSpace(settings.Model)
+	settings.ReasoningEffort = strings.TrimSpace(settings.ReasoningEffort)
+	return settings, nil
+}
+
+func stringList(value json.RawMessage) ([]string, error) {
+	var list []string
+	err := json.Unmarshal(value, &list)
+	return list, err
+}
+
+// validate reads an app-global value as the typed settings it holds, so a
+// value that would not load again never reaches the approval card.
+func (s *Service) validate(target Entry, value json.RawMessage) error {
+	switch target.Key {
+	case "memory.settings":
+		var settings jazsettings.MemorySettings
+		return typedValue(value, &settings, target.Key)
+	case "browser.settings":
+		var settings jazsettings.BrowserSettings
+		return typedValue(value, &settings, target.Key)
+	case "computer.settings":
+		var settings jazsettings.ComputerSettings
+		return typedValue(value, &settings, target.Key)
+	case "devices.settings":
+		var settings jazsettings.DeviceSettings
+		if err := typedValue(value, &settings, target.Key); err != nil {
+			return err
+		}
+		_, err := jazsettings.NormalizeDeviceSettings(settings)
+		return err
+	}
+	return nil
+}
+
+func typedValue(value json.RawMessage, out any, key string) error {
+	if err := json.Unmarshal(value, out); err != nil {
+		return fmt.Errorf("%s does not accept that value: %w", key, err)
+	}
+	return nil
 }
 
 func requestedValue(input UpdateInput, target Entry) (json.RawMessage, error) {
@@ -323,7 +385,8 @@ func requestedValue(input UpdateInput, target Entry) (json.RawMessage, error) {
 	case input.Agent != nil:
 		value, _ = marshalString(*input.Agent)
 	case input.Model != nil:
-		value, _ = marshalString(*input.Model)
+		data, _ := json.Marshal(modelValueSettings{Model: strings.TrimSpace(*input.Model), ReasoningEffort: strings.TrimSpace(input.ReasoningEffort)})
+		value = string(data)
 	case input.Plugins != nil:
 		data, _ := json.Marshal(*input.Plugins)
 		value = string(data)
@@ -389,15 +452,12 @@ func (s *Service) applyBot(ctx context.Context, bot Bot, target Entry, value jso
 			update.Agent = &text
 		}
 	case "bot.model":
-		var model struct {
-			Model           string `json:"model"`
-			ReasoningEffort string `json:"reasoning_effort"`
-		}
-		if err := json.Unmarshal(value, &model); err != nil {
-			return errors.New(`bot.model needs {"model": "...", "reasoning_effort": "..."}`)
+		model, err := modelValue(value)
+		if err != nil {
+			return err
 		}
 		update.Model = &model.Model
-		update.ReasoningEffort = strings.TrimSpace(model.ReasoningEffort)
+		update.ReasoningEffort = model.ReasoningEffort
 	case "bot.plugins":
 		var plugins []string
 		if err := json.Unmarshal(value, &plugins); err != nil {
@@ -486,10 +546,14 @@ func clip(value string) string {
 	return value[:limit] + "…"
 }
 
+// info reports a setting. NeedsReview is what actually opens an approval card:
+// an app-global change. A permission-risk bot field stays visible as that risk
+// while narrowing it applies at once, because it can only reduce the bot's
+// reach.
 func info(candidate Entry) Info {
 	return Info{
 		Key: candidate.Key, Scope: candidate.Scope, Risk: candidate.Risk, Secret: candidate.Secret,
-		Editable: candidate.Editable, NeedsReview: candidate.Editable && (candidate.appWide() || candidate.Risk == RiskPermission),
+		Editable: candidate.Editable, NeedsReview: candidate.Editable && candidate.appWide(),
 		Description: candidate.Description,
 	}
 }

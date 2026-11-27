@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/wins/jaz/backend/internal/sessionevents"
+	jazsettings "github.com/wins/jaz/backend/internal/settings"
 	"github.com/wins/jaz/backend/internal/storage"
 	sqlitestore "github.com/wins/jaz/backend/internal/storage/sqlite"
 )
@@ -32,6 +33,7 @@ type settingsFixture struct {
 	bot     Bot
 	thread  storage.Session
 	events  *sessionevents.Bus
+	applied []string
 }
 
 // fakeBots stands in for the bot service: storage boundaries are faked, the
@@ -83,19 +85,23 @@ func newSettingsFixture(t *testing.T, approvals *fakeApprovals) *settingsFixture
 	if err != nil {
 		t.Fatal(err)
 	}
-	bots := &fakeBots{bot: Bot{ID: bot.ID, Name: "Gimli", Prompt: "Hold the line"}}
+	bots := &fakeBots{bot: Bot{ID: bot.ID, Name: "Gimli", Prompt: "Hold the line", Model: "gpt-5", ReasoningEffort: "high"}}
 	events := sessionevents.New()
-	service := New(Dependencies{
+	fixture := &settingsFixture{t: t, store: store, bots: bots, events: events, bot: bots.bot}
+	fixture.service = New(Dependencies{
 		Settings: store, Changes: store, Bots: bots,
 		Events: store, Bus: events, Sessions: store, Approvals: approvals,
+		Applied: func(_ context.Context, key string) error {
+			fixture.applied = append(fixture.applied, key)
+			return nil
+		},
 	})
 	thread, err := store.CreateSession(storage.CreateSession{Slug: "worker", SourceType: storage.SourceBotWorker, SourceID: bot.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &settingsFixture{
-		t: t, store: store, bots: bots, service: service, thread: thread, events: events, bot: bots.bot,
-	}
+	fixture.thread = thread
+	return fixture
 }
 
 func (f *settingsFixture) update(input UpdateInput) (UpdateOutput, error) {
@@ -275,5 +281,121 @@ func TestListReportsEverySettingWithMetadata(t *testing.T) {
 	view, err := fixture.service.Read(fixture.thread.ID, "bot.name")
 	if err != nil || view.Value != `"Gimli"` {
 		t.Fatalf("bot.name = %+v, %v", view, err)
+	}
+}
+
+// The round trip the review found broken: reading a bot's model and writing it
+// back keeps both the model and its reasoning effort.
+func TestBotModelReadRoundTripsThroughValue(t *testing.T) {
+	fixture := newSettingsFixture(t, &fakeApprovals{})
+	view, err := fixture.service.Read(fixture.thread.ID, "bot.model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := fixture.update(UpdateInput{Key: "bot.model", Value: view.Value})
+	if err != nil || !out.Applied {
+		t.Fatalf("round trip = %+v, %v", out, err)
+	}
+	if bot, _ := fixture.bots.Load(fixture.bot.ID); bot.Model != "gpt-5" || bot.ReasoningEffort != "high" {
+		t.Fatalf("round trip changed the bot: model=%q effort=%q", bot.Model, bot.ReasoningEffort)
+	}
+
+	out, err = fixture.update(UpdateInput{Key: "bot.model", Value: `{"model":"o3","reasoning_effort":"low"}`})
+	if err != nil || !out.Applied {
+		t.Fatalf("value change = %+v, %v", out, err)
+	}
+	if bot, _ := fixture.bots.Load(fixture.bot.ID); bot.Model != "o3" || bot.ReasoningEffort != "low" {
+		t.Fatalf("value change = model=%q effort=%q", bot.Model, bot.ReasoningEffort)
+	}
+
+	// Naming a model alone keeps the effort the bot already runs with.
+	if _, err := fixture.update(UpdateInput{Key: "bot.model", Value: `{"model":"o4"}`}); err != nil {
+		t.Fatal(err)
+	}
+	if bot, _ := fixture.bots.Load(fixture.bot.ID); bot.Model != "o4" || bot.ReasoningEffort != "low" {
+		t.Fatalf("model only = model=%q effort=%q", bot.Model, bot.ReasoningEffort)
+	}
+}
+
+// A value Jaz could not read back never reaches the approval card.
+func TestAppGlobalValueIsValidatedBeforeApproval(t *testing.T) {
+	for _, key := range []string{"memory.settings", "browser.settings", "computer.settings"} {
+		approvals := &fakeApprovals{approve: true}
+		fixture := newSettingsFixture(t, approvals)
+		t.Run(key, func(t *testing.T) {
+			if _, err := fixture.update(UpdateInput{Key: key, Value: `{"enabled":"maybe"}`}); err == nil || errors.Is(err, ErrNotAllowed) {
+				t.Fatalf("%s mistyped value = %v, want a validation error", key, err)
+			}
+			if len(approvals.asked) != 0 {
+				t.Fatalf("%s opened an approval card for an invalid value: %v", key, approvals.asked)
+			}
+			rows := fixture.audit()
+			if len(rows) != 1 || rows[0].Error == "" || rows[0].ApprovalRequired {
+				t.Fatalf("%s audit = %+v", key, rows)
+			}
+			if _, err := fixture.store.LoadSetting(strings.SplitN(key, ".", 2)[0], strings.SplitN(key, ".", 2)[1]); err == nil {
+				t.Fatalf("%s stored the invalid value", key)
+			}
+		})
+	}
+}
+
+func TestUnknownKeyIsAudited(t *testing.T) {
+	fixture := newSettingsFixture(t, &fakeApprovals{})
+	if _, err := fixture.update(UpdateInput{Key: "nope.nope", Value: `1`}); err == nil {
+		t.Fatal("unknown setting accepted")
+	}
+	rows := fixture.audit()
+	if len(rows) != 1 || rows[0].SettingKey != "nope.nope" || rows[0].Error == "" {
+		t.Fatalf("audit = %+v", rows)
+	}
+}
+
+// An approved app-global change runs the follow-up Jaz needs for it to take
+// effect; a bot-local one does not.
+func TestAppliedRunsOnlyForAppGlobalChanges(t *testing.T) {
+	approvals := &fakeApprovals{approve: true}
+	fixture := newSettingsFixture(t, approvals)
+	if _, err := fixture.update(UpdateInput{Key: "bot.prompt", Value: `"short"`}); err != nil {
+		t.Fatal(err)
+	}
+	if len(fixture.applied) != 0 {
+		t.Fatalf("bot-local change ran follow-up work: %v", fixture.applied)
+	}
+	if _, err := fixture.update(UpdateInput{Key: "memory.settings", Value: `{"enabled":false}`}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(fixture.applied, []string{"memory.settings"}) {
+		t.Fatalf("follow-up work = %v", fixture.applied)
+	}
+}
+
+// A value the tool accepts loads back through the typed loader Jaz reads.
+func TestAcceptedAppGlobalValueLoadsBack(t *testing.T) {
+	approvals := &fakeApprovals{approve: true}
+	fixture := newSettingsFixture(t, approvals)
+	if _, err := fixture.update(UpdateInput{Key: "memory.settings", Value: `{"enabled":false,"agent":"codex","model":"gpt-5"}`}); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := jazsettings.LoadMemorySettings(fixture.store)
+	if err != nil || settings.Enabled || settings.Agent != "codex" || settings.Model != "gpt-5" {
+		t.Fatalf("stored memory settings = %+v, %v", settings, err)
+	}
+	if _, err := fixture.update(UpdateInput{Key: "devices.settings", Value: `{"public_url":"https://jaz.example.com"}`}); !errors.Is(err, ErrNotAllowed) {
+		t.Fatalf("device access change = %v, want ErrNotAllowed", err)
+	}
+}
+
+func TestNeedsReviewMeansAnApprovalCard(t *testing.T) {
+	fixture := newSettingsFixture(t, &fakeApprovals{})
+	list, err := fixture.service.List(fixture.thread.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, setting := range list {
+		want := setting.Editable && setting.Scope == ScopeAppGlobal
+		if setting.NeedsReview != want {
+			t.Fatalf("%s needs_review = %v, want %v", setting.Key, setting.NeedsReview, want)
+		}
 	}
 }

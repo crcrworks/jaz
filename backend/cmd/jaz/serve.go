@@ -276,6 +276,7 @@ func startServer(
 	publicRoutes server.PublicRoutes,
 	recordObservers *integrationingest.Observers,
 	ingestWriter integrationingest.MaterializingWriter,
+	computer *computercontrol.DesktopBackend,
 ) error {
 	authKey := string(runtimeAuthKey)
 	handler := &server.Server{
@@ -338,7 +339,7 @@ func startServer(
 		loops.WithScope(botService.BotOf),
 	)
 	jazTools.SetBots(bots.NewMCPTools(botService))
-	jazTools.SetSettings(app.NewSettingAuth(store, botService, events, manager))
+	jazTools.SetSettings(app.NewSettingAuth(store, botService, events, manager, app.NewSettingsApplied(store, memory, computer, jazTools, mcpManager)))
 	handler.Routes = append(handler.Routes, app.BotRoutes(botsapi.NewHandler(botService, events))...)
 	handler.PublicRoutes = append(handler.PublicRoutes, app.HookRoute(hooksapi.NewHandler(loopService)))
 	handler.RoutineOwner = botService.RoutineOwner
