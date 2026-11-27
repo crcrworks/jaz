@@ -32,3 +32,16 @@ Nothing here changes another agent: OpenCode, Codex, Claude and the
 provider-catalog paths keep their own effort contracts, and a pi level that a
 model does not offer is still not sent — the bridge applies the ACP choice only
 after pi reports the model's own state.
+
+## What pi does and does not describe itself
+
+pi's model list is pi's own answer, but for a provider pi does not ship, that
+answer only knows what Jaz declared in `<root>/acp/pi/models.json`
+(decision 0009). A declaration whose model entries carry no `reasoning` field
+leaves pi reading the model as one that cannot think, so pi reports `off` alone
+and the picker has no level to offer. Jaz does not fill the field in: whether
+`commandcode/deepseek/deepseek-v4.1-flash` reasons is not something the
+provider's `/models` list says, and a level invented here would be exactly the
+guess this decision refuses. A model pi describes itself — or one a person
+declared with `reasoning` and `thinkingLevelMap` in that profile's
+`models.json` — keeps the levels pi reports for it.
