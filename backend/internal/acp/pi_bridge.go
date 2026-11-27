@@ -67,6 +67,9 @@ func (m *Manager) piModels(ctx context.Context, cfg AgentConfig) (pirpc.ModelCat
 // piModelCatalog reports pi's own model list, with pi's context limits and
 // thinking levels. A model pi states nothing about keeps an empty value.
 func (m *Manager) piModelCatalog(ctx context.Context, cfg AgentConfig) (AgentModelCatalog, error) {
+	if piCommand(cfg) == "" {
+		return AgentModelCatalog{}, pirpc.ErrNoExecutable
+	}
 	catalog, err := m.piModels(ctx, cfg)
 	if err != nil {
 		return AgentModelCatalog{}, err

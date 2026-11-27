@@ -225,6 +225,9 @@ func (s *bridgeSession) describe(ctx context.Context) optionCatalog {
 // DiscoverModels reads pi's model list from a scratch process, the one place
 // Jaz asks pi directly rather than through a session.
 func DiscoverModels(ctx context.Context, cfg Config) (ModelCatalog, error) {
+	if err := CheckInstalled(cfg.Command); err != nil {
+		return ModelCatalog{}, err
+	}
 	client, err := Start(ctx, Launch{Command: cfg.Command, Env: cfg.Env, Args: []string{"--mode", "rpc", "--no-approve"}})
 	if err != nil {
 		return ModelCatalog{}, err

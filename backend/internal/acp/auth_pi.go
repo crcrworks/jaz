@@ -23,6 +23,10 @@ func resolvePiAuth(cfg AgentConfig, root string, env map[string]string) resolved
 		StoragePath: runtimefiles.New(root).ACPPiHome,
 		Source:      AuthModeExistingCLI,
 	}
+	if _, err := ResolveExecutable(AgentPi); err != nil {
+		status.Reason = "pi executable not found; install pi on the Jaz server"
+		return status
+	}
 	providers := piAuthProviders(status.StoragePath)
 	if len(providers) == 0 {
 		status.Reason = "sign in to pi with `pi auth login <provider>` in its Jaz profile"
