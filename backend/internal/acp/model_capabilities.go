@@ -143,6 +143,11 @@ func (c ModelCapabilities) ValidateReasoningEffort(agent, providerID, model, eff
 	if effort == "" {
 		return nil
 	}
+	// An agent that names "none" among its levels means thinking off by it, and
+	// no model has to offer that level for the switch to work.
+	if effort == "none" && agentPolicyForAgent(agent).supportsReasoningEffort("none") {
+		return nil
+	}
 	models, err := c.reasoningCapabilityModels(agent, providerID)
 	if err != nil {
 		return err
@@ -152,13 +157,52 @@ func (c ModelCapabilities) ValidateReasoningEffort(agent, providerID, model, eff
 		// Native session config options validate the effort before a turn starts.
 		return nil
 	}
-	if !ok || found.Reasoning.Status == modelcatalog.ReasoningUnavailable {
+	if !ok {
 		return fmt.Errorf("%w for %s model %q", ErrReasoningCapabilitiesUnavailable, strings.TrimSpace(agent), displayModel(model))
 	}
-	if found.Reasoning.Status == modelcatalog.ReasoningPending {
+	switch found.Reasoning.Status {
+	case modelcatalog.ReasoningUnavailable:
+		return fmt.Errorf("%w for %s model %q", ErrReasoningCapabilitiesUnavailable, strings.TrimSpace(agent), displayModel(model))
+	case modelcatalog.ReasoningPending:
 		return modelcatalog.ErrCatalogUnavailable
+	case modelcatalog.ReasoningUnknown:
+		// The provider listed the model without describing its reasoning, so
+		// whether it can run this effort is the agent's call at the session.
+		return nil
 	}
 	return validateModelReasoningEffort(agent, model, effort, found.Reasoning.Efforts)
+}
+
+// sessionReasoningEffort returns the effort a session starts with. An agent
+// that keeps an effort per model, as OpenCode does, skips one that model does
+// not offer instead of refusing to start over it. Its own "none" is thinking
+// off rather than a level a model offers, so no model's list drops it.
+func (c ModelCapabilities) sessionReasoningEffort(agent, providerID, model, effort string) string {
+	policy := agentPolicyForAgent(agent)
+	if effort == "" || !policy.effortsPerModel {
+		return effort
+	}
+	if effort == "none" && policy.supportsReasoningEffort("none") {
+		return effort
+	}
+	models, err := c.reasoningCapabilityModels(agent, providerID)
+	if err != nil {
+		return effort
+	}
+	found, ok := findCapabilityModel(models, model)
+	if !ok {
+		return effort
+	}
+	switch found.Reasoning.Status {
+	case modelcatalog.ReasoningReady:
+		if containsString(found.Reasoning.Efforts, effort) {
+			return effort
+		}
+		return ""
+	case modelcatalog.ReasoningUnavailable:
+		return ""
+	}
+	return effort
 }
 
 func resolveModelCapabilities(agent string, models []modelcatalog.Model, allowAgentCapabilities bool) []AgentModel {
@@ -191,7 +235,7 @@ func resolveModelCapabilities(agent string, models []modelcatalog.Model, allowAg
 			if agent == AgentClaude && containsString(resolved.Reasoning.Efforts, "xhigh") {
 				resolved.Reasoning.Efforts = addReasoningEffort(resolved.Reasoning.Efforts, claudeReasoningEffortUltracode)
 			}
-		case modelcatalog.ReasoningUnavailable, modelcatalog.ReasoningPending:
+		case modelcatalog.ReasoningUnknown, modelcatalog.ReasoningUnavailable, modelcatalog.ReasoningPending:
 			if allowAgentCapabilities {
 				resolved.Reasoning = agentReasoningCapabilities(supported)
 			}

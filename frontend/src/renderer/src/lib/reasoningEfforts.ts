@@ -79,8 +79,13 @@ export function modelReasoningSelection({
   if (suggestion?.reasoning.status === 'pending') {
     return { options: agentOptions, effectiveEffort: effort, supported: true, status: 'pending', blocked: effort !== '' }
   }
-  if (!suggestion || suggestion.reasoning.status !== 'ready') {
+  if (!suggestion || suggestion.reasoning.status === 'unknown') {
     return { options: agentOptions, effectiveEffort: effort, supported: true, status: 'ready', blocked: false }
+  }
+  if (suggestion.reasoning.status !== 'ready') {
+    // The provider knows the model has no reasoning, so the agent's levels do
+    // not apply to it and the turn runs without one.
+    return { options: [], effectiveEffort: '', supported: supportedReasoningEffort(effort, []), status: 'ready', blocked: false }
   }
   // A model that reasons on its own has no level to choose.
   const options = suggestion.reasoning.automatic ? [] : reasoningOptions(suggestion)

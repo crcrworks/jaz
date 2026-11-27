@@ -35,7 +35,9 @@ func fetchOpenAICompatibleModels(ctx context.Context, baseURL, apiKey string) ([
 		if label == "" {
 			label = id
 		}
-		model := modelWithoutProviderReasoning(id, label, "")
+		// A /models entry names a model, not what it can do, so its reasoning
+		// stays unknown rather than being read as none.
+		model := modelWithUnknownReasoning(id, label, "")
 		model.ContextLength = entry.ContextLength
 		out = append(out, completeModelMetadata(model))
 	}

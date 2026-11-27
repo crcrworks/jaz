@@ -1236,7 +1236,8 @@ export interface ModelCatalogEntry {
 }
 
 export interface ModelReasoningCapabilities {
-  status: 'pending' | 'ready' | 'unavailable'
+  /** unknown means the provider listed the model without describing its reasoning. */
+  status: 'pending' | 'ready' | 'unknown' | 'unavailable'
   scope?: 'provider' | 'agent'
   efforts?: string[]
   default_effort?: string

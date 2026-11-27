@@ -440,3 +440,33 @@ func TestThreadsABotStartsAreItsSubtasks(t *testing.T) {
 		}
 	}
 }
+
+// A provider listing that says nothing about a model's reasoning must not stop
+// an OpenCode session that asks for an effort; the session keeps it, and a model
+// the provider describes without that level drops it instead of failing.
+func TestSpawnConfigStartsOpenCodeOnModelsWithoutReasoningMetadata(t *testing.T) {
+	catalog := &capabilityCatalog{providers: map[string][]modelcatalog.Model{
+		modelprovider.ProviderOpenAI: {
+			{Value: "deepseek-v4.1-flash", Reasoning: modelcatalog.Reasoning{Status: modelcatalog.ReasoningUnknown}},
+			{Value: "plain", Reasoning: modelcatalog.Reasoning{Status: modelcatalog.ReasoningReady, Efforts: []string{"low", "medium"}}},
+		},
+	}}
+	manager := &Manager{
+		cfg: Config{ModelCatalog: catalog},
+		agents: AgentCatalog{AgentOpenCode: {
+			Command:                 AgentOpenCode,
+			ProviderMode:            AgentProviderModeAgentDefaults,
+			ModelProviderCapability: modelprovider.CapabilityChatCompletions,
+			ModelProvider:           modelprovider.ProviderOpenAI,
+		}},
+		log: log.New(io.Discard),
+	}
+	_, _, effort, err := manager.spawnConfig(SpawnRequest{ACPAgent: AgentOpenCode, Model: "deepseek-v4.1-flash", ReasoningEffort: "xhigh"})
+	if err != nil || effort != "xhigh" {
+		t.Fatalf("unknown reasoning effort = %q, %v", effort, err)
+	}
+	_, _, effort, err = manager.spawnConfig(SpawnRequest{ACPAgent: AgentOpenCode, Model: "plain", ReasoningEffort: "xhigh"})
+	if err != nil || effort != "" {
+		t.Fatalf("unsupported effort on a described model = %q, %v", effort, err)
+	}
+}

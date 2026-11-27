@@ -17,6 +17,9 @@ type Pricing struct {
 type ReasoningStatus string
 
 const (
+	// ReasoningUnknown is a model whose provider said nothing about reasoning,
+	// which is not the same as knowing it has none.
+	ReasoningUnknown     ReasoningStatus = "unknown"
 	ReasoningUnavailable ReasoningStatus = "unavailable"
 	ReasoningPending     ReasoningStatus = "pending"
 	ReasoningReady       ReasoningStatus = "ready"
@@ -135,6 +138,10 @@ func cloneModel(model Model) Model {
 
 func modelWithoutProviderReasoning(value, label, description string) Model {
 	return Model{Value: value, Label: label, Description: description, Reasoning: Reasoning{Status: ReasoningUnavailable}}
+}
+
+func modelWithUnknownReasoning(value, label, description string) Model {
+	return Model{Value: value, Label: label, Description: description, Reasoning: Reasoning{Status: ReasoningUnknown}}
 }
 
 func openRouterBackedModel(value, label, description, openRouterID string) Model {
