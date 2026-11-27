@@ -161,6 +161,9 @@ type AgentConfig struct {
 	// before PATH for companion CLIs. Runtime-only, never persisted.
 	AdapterBinDir string
 	LoginBinDir   string
+	// SessionID is the Jaz thread this launch serves, for adapters that must
+	// name it to Jaz's own MCP servers. Runtime-only, never persisted.
+	SessionID string
 	// ModelRequested marks Model as named by the request that starts the
 	// session rather than saved earlier. Runtime-only, never persisted.
 	ModelRequested bool

@@ -110,7 +110,7 @@ func (m *Manager) openConn(ctx context.Context, name string, cfg AgentConfig, en
 		return conn, nil, err
 	}
 	if cfg.BuiltinBridge {
-		return m.openBuiltinBridge(ctx, name, cfg)
+		return m.openBuiltinBridge(ctx, name, cfg, systemPrompt)
 	}
 	if strings.TrimSpace(cfg.ManagedAdapter) != "" {
 		if m.cfg.Adapters == nil {
@@ -196,7 +196,7 @@ func validateAgentLaunch(name string, cfg AgentConfig) error {
 	return nil
 }
 
-func (m *Manager) openBuiltinBridge(ctx context.Context, name string, cfg AgentConfig) (jsonrpc.MessageConn, *processStderrTail, error) {
+func (m *Manager) openBuiltinBridge(ctx context.Context, name string, cfg AgentConfig, systemPrompt string) (jsonrpc.MessageConn, *processStderrTail, error) {
 	switch CanonicalAgentName(name) {
 	case AgentMicrosoftCopilot:
 		auth := cfg.MicrosoftCopilot
@@ -208,7 +208,7 @@ func (m *Manager) openBuiltinBridge(ctx context.Context, name string, cfg AgentC
 		}
 		return m365copilot.OpenACPConn(ctx, auth), nil, nil
 	case AgentPi:
-		return pirpc.OpenACPConn(ctx, m.piBridgeConfig(cfg)), nil, nil
+		return pirpc.OpenACPConn(ctx, m.piBridgeConfig(cfg, systemPrompt)), nil, nil
 	default:
 		return nil, nil, fmt.Errorf("acp agent %q has no built-in ACP bridge", name)
 	}

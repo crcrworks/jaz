@@ -6,32 +6,30 @@ import (
 	"strings"
 
 	mcpconfig "github.com/wins/jaz/backend/internal/mcpconfig"
-	"github.com/wins/jaz/backend/internal/modelcatalog"
 	"github.com/wins/jaz/backend/internal/mcpsession"
+	"github.com/wins/jaz/backend/internal/modelcatalog"
 	"github.com/wins/jaz/backend/internal/pirpc"
 )
 
 // piBridgeConfig is what the in-process bridge needs to run a pi process for
-// this thread: the isolated profile, Jaz's own prompt at session creation, and
-// Jaz's MCP servers, which pi takes through its own client.
-func (m *Manager) piBridgeConfig(cfg AgentConfig) pirpc.Config {
-	root := m.cfg.Root
-	env := m.probeEnv(AgentPi, cfg)
+// this thread: the isolated profile, the prompt the manager rendered for this
+// launch, and Jaz's MCP servers, which pi takes through its own client.
+func (m *Manager) piBridgeConfig(cfg AgentConfig, launchPrompt string) pirpc.Config {
 	return pirpc.Config{
 		Command: piCommand(cfg),
-		Env:     env,
-		Profile: pirpc.NewProfile(root),
-		Prompt: func(ctx context.Context, cwd string) (string, error) {
-			return m.systemPrompt(ctx, cwd, "", MCPServerPolicyAll, nil)
-		},
+		Env:     m.probeEnv(AgentPi, cfg),
+		Profile: pirpc.NewProfile(m.cfg.Root),
+		Cwd:     cfg.Cwd,
+		Prompt:  launchPrompt,
 		Servers: func(ctx context.Context) ([]pirpc.MCPServer, error) {
-			return piMCPServers(ctx, m.cfg.MCPStore)
+			return piMCPServers(mcpsession.With(ctx, cfg.SessionID), m.cfg.MCPStore)
 		},
 	}
 }
 
-// piMCPServers is Jaz's server list as pi's client needs it, with the calling
-// thread's session header resolved so its tools work in that thread.
+// piMCPServers is Jaz's server list as pi's client needs it. ctx names the
+// thread the servers serve, so the session header Jaz's own tools read
+// resolves to that thread instead of travelling as a placeholder.
 func piMCPServers(ctx context.Context, store mcpconfig.ServerReader) ([]pirpc.MCPServer, error) {
 	servers, err := enabledHTTPMCPServers(ctx, store, MCPServerPolicyAll)
 	if err != nil || servers == nil {
@@ -44,10 +42,7 @@ func piMCPServers(ctx context.Context, store mcpconfig.ServerReader) ([]pirpc.MC
 			continue
 		}
 		headers := map[string]string{}
-		for _, header := range server.Headers {
-			if strings.EqualFold(header.Name, mcpsession.HeaderName) && strings.TrimSpace(header.Value) == mcpsession.HeaderPlaceholder {
-				continue
-			}
+		for _, header := range resolveSessionHeaderValues(ctx, server.Headers) {
 			headers[header.Name] = header.Value
 		}
 		out = append(out, pirpc.MCPServer{Name: server.Name, URL: server.URL, Headers: headers})

@@ -15,9 +15,14 @@ type Config struct {
 	Command string
 	Env     map[string]string
 	Profile Profile
+	// Cwd is the directory the thread runs in; session/new may name its own.
+	Cwd string
 	// Prompt is Jaz's session extension: platform context, prompt files,
-	// connections, memory and skills. pi appends it to its own prompt.
-	Prompt  func(context.Context, string) (string, error)
+	// connections, memory and skills. pi appends it to its own prompt at every
+	// launch, so a resumed thread keeps its instructions instead of losing them.
+	Prompt string
+	// Servers is Jaz's MCP surface. ctx names the thread it serves, so a
+	// per-thread header reaches Jaz's own tools naming that thread.
 	Servers func(context.Context) ([]MCPServer, error)
 }
 
@@ -54,6 +59,7 @@ type acpBridge struct {
 type bridgeSession struct {
 	id     string
 	client *Client
+	cwd    string
 	// model and effort are what ACP last selected; they are applied to the pi
 	// process once its state is known.
 	model  string
@@ -150,9 +156,8 @@ func (b *acpBridge) start(ctx context.Context, metaPrompt, sessionID, cwd string
 	if session := b.session(sessionID); session != nil {
 		return session, nil
 	}
-	seeded := launchContext(ctx)
-	cwd = firstNonEmpty(cwd, seeded.Cwd)
-	prompt := firstNonEmpty(metaPrompt, seeded.Prompt)
+	cwd = firstNonEmpty(cwd, b.cfg.Cwd)
+	prompt := firstNonEmpty(b.cfg.Prompt, metaPrompt)
 	var servers []MCPServer
 	if b.cfg.Servers != nil {
 		listed, err := b.cfg.Servers(ctx)
@@ -169,7 +174,7 @@ func (b *acpBridge) start(ctx context.Context, metaPrompt, sessionID, cwd string
 	if err != nil {
 		return nil, err
 	}
-	session := &bridgeSession{id: sessionID, client: client}
+	session := &bridgeSession{id: sessionID, client: client, cwd: cwd}
 	go b.pump(session)
 	b.mu.Lock()
 	b.sessions[sessionID] = session

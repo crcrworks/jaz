@@ -1,7 +1,6 @@
 package pirpc
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -136,22 +135,4 @@ func mcpExtension(servers []MCPServer) (string, error) {
 		lines = append(lines, fmt.Sprintf("  pi.registerMcpServer(%q, %s);", server.Name, config))
 	}
 	return "export default function (pi: any) {\n" + strings.Join(lines, "\n") + "\n}\n", nil
-}
-
-type launchKey struct{}
-
-type launchSettings struct {
-	Prompt string
-	Cwd    string
-}
-
-// WithLaunchContext carries the prompt and directory the manager rendered for a
-// thread it has not named yet; the bridge reads them when session/new arrives.
-func WithLaunchContext(ctx context.Context, prompt, cwd string) context.Context {
-	return context.WithValue(ctx, launchKey{}, launchSettings{Prompt: prompt, Cwd: cwd})
-}
-
-func launchContext(ctx context.Context) launchSettings {
-	settings, _ := ctx.Value(launchKey{}).(launchSettings)
-	return settings
 }

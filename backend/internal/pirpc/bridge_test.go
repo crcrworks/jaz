@@ -33,10 +33,12 @@ func openBridge(t *testing.T, prompt string, servers []MCPServer) *bridgeFixture
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	conn := OpenACPConn(WithLaunchContext(ctx, prompt, root), Config{
+	conn := OpenACPConn(ctx, Config{
 		Command: fake.Command,
 		Env:     fake.Env,
 		Profile: NewProfile(root),
+		Cwd:     root,
+		Prompt:  prompt,
 		Servers: func(context.Context) ([]MCPServer, error) { return servers, nil },
 	})
 	fixture.peer = jsonrpc.NewPeer(conn, jsonrpc.HandlerFunc(fixture.handle))
@@ -315,3 +317,44 @@ func textBlock(t *testing.T, text string) acpschema.ContentBlock {
 }
 
 var _ = time.Second
+
+// TestBridgeReappliesThePromptOnResume checks what a restarted Jaz must hand pi
+// again: a resumed thread is launched with Jaz's full prompt, so its instructions
+// do not shrink to the leftovers of the previous launch.
+func TestBridgeReappliesThePromptOnResume(t *testing.T) {
+	platform := "## Jaz platform\n\nPLATFORM-MARKER"
+	fixture := openBridge(t, platform, nil)
+	fixture.initialize(t)
+	sessionID := fixture.newSession(t)
+
+	prompt := profilePromptFile(fixture.root, sessionID)
+	if got := readFileText(t, prompt); !strings.Contains(got, "PLATFORM-MARKER") {
+		t.Fatalf("the first launch must append Jaz's prompt, got %d bytes", len(got))
+	}
+
+	// A restarted Jaz opens a new bridge for the same thread.
+	resumed := openBridge(t, platform, nil)
+	resumed.initialize(t)
+	if _, err := resumed.peer.Call(context.Background(), acpschema.AgentMethodSessionResume, map[string]any{
+		"sessionId": sessionID,
+		"cwd":       resumed.root,
+	}); err != nil {
+		t.Fatalf("session/resume: %v", err)
+	}
+	if got := readFileText(t, profilePromptFile(resumed.root, sessionID)); !strings.Contains(got, "PLATFORM-MARKER") {
+		t.Fatalf("a resumed thread must keep Jaz's prompt, got %d bytes: %q", len(got), got)
+	}
+}
+
+func profilePromptFile(root, sessionID string) string {
+	return filepath.Join(root, "acp", "pi", "sessions", safeSessionName(sessionID), "append-prompt.md")
+}
+
+func readFileText(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", filepath.Base(path), err)
+	}
+	return string(data)
+}

@@ -195,12 +195,13 @@ func agentPolicyForAgent(agentName string) agentPolicy {
 			effortOptions:        museReasoningEffortOptions,
 		}
 	case AgentPi:
-		// pi appends the session prompt at launch, owns its model ids
-		// ("provider/id") and its thinking-level names, and refuses a model it
-		// does not offer rather than quietly running another.
+		// pi appends the session prompt to its own at every launch (resume
+		// included), and owns its model ids ("provider/id"), its
+		// thinking-level names, and which models it will run.
 		return agentPolicy{
 			modelConfigID:          sessionConfigModel,
 			effortConfigID:         sessionConfigThoughtLevel,
+			systemPromptAtLaunch:   true,
 			promptPersistsOnRestore: true,
 			unadvertisedModel:      unadvertisedModelRejected,
 			effortOptions:          piReasoningEffortOptions,
