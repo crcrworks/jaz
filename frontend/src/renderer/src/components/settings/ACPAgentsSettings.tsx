@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, ChevronDown, CircleAlert, Download, KeyRound, LoaderCircle, LogIn } from 'lucide-react'
+import { CheckCircle2, ChevronDown, CircleAlert, Copy, Download, KeyRound, LoaderCircle, LogIn } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AgentAvatar } from '@/components/acp/AgentAvatar'
@@ -31,6 +31,7 @@ import {
   selectedACPModelProvider,
 } from '@/lib/agentRuntimes'
 import { cloneAgentSettings } from '@/lib/agentSettings'
+import { writeClipboard } from '@/lib/clipboard'
 import { disconnectACPAuth, prepareACPAgent, startACPAuthLogin } from '@/lib/api/settings'
 import type {
   ACPAgentAuthStatus,
@@ -596,10 +597,24 @@ function AgentAuthPanel({
 
       {(method === 'login' && canLogin) || !canKey ? (
         <div className="flex flex-col items-start gap-2">
-          <Button variant="primary" size="md" disabled={disabled || running || !canLogin} onClick={onStartLogin}>
-            {running ? <LoaderCircle size={14} className="animate-spin" /> : <LogIn size={14} />}
-            {running ? 'Waiting for sign-in…' : `Sign in with ${authProviderLabel(agent)}`}
-          </Button>
+          {canLogin || !status?.login_command ? (
+            <Button variant="primary" size="md" disabled={disabled || running || !canLogin} onClick={onStartLogin}>
+              {running ? <LoaderCircle size={14} className="animate-spin" /> : <LogIn size={14} />}
+              {running ? 'Waiting for sign-in…' : `Sign in with ${authProviderLabel(agent)}`}
+            </Button>
+          ) : (
+            <div className="flex w-full items-center gap-2 rounded-control bg-bg px-3 py-2">
+              <code className="min-w-0 flex-1 break-all font-mono text-[12px] text-ink">{status.login_command}</code>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Copy sign-in command"
+                onClick={() => void writeClipboard(status.login_command ?? '')}
+              >
+                <Copy size={13} />
+              </Button>
+            </div>
+          )}
           {!canLogin && (status?.login_command_reason || status?.reason) ? (
             <p className="text-[12px] text-ink-3">{status.login_command_reason || status.reason}</p>
           ) : null}

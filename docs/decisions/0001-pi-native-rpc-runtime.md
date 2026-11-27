@@ -24,8 +24,10 @@ record shapes appear; the runtime contract above it stays transport-neutral.
   mode: built-in commands are TUI-only.)
 - **Credentials.** pi reads `auth.json` in its own agent directory.
   `PI_CODING_AGENT_DIR` points at `<root>/acp/pi`, so a Jaz thread never reads
-  or writes the user's `~/.pi`. Jaz forwards no provider key to pi beyond the
-  provider environment variables every agent already receives.
+  or writes the user's `~/.pi`. Jaz also writes that profile's `models.json`
+  from its own Model Providers (decision 0008), naming keys by environment
+  variable so no secret reaches the profile; a provider pi describes itself is
+  left alone. pi still resolves credentials and answers `auth check`.
 - **Session.** Each thread runs one pi process on its own session file under
   `<root>/acp/pi/sessions/<jaz session id>/session.jsonl`. pi reopens that file
   when a thread resumes, so provider history and the thread's cwd survive a

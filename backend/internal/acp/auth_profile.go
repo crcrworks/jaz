@@ -172,7 +172,7 @@ func resolveAgentAuthWithProviders(name string, cfg AgentConfig, root string, en
 	case AgentCopilot:
 		return resolveCopilotAuth(env)
 	case AgentPi:
-		return resolvePiAuth(cfg, root, env)
+		return resolvePiAuth(cfg, root, env, providers)
 	case AgentDevin:
 		return resolveDevinAuth(env)
 	case AgentMicrosoftCopilot:

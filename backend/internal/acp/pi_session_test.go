@@ -67,22 +67,6 @@ func TestPiIsACompactCapableBuiltinAgent(t *testing.T) {
 	}
 }
 
-// TestPiProfileStaysInsideJaz checks that a pi thread's process is pointed at
-// Jaz's own pi profile rather than the user's ~/.pi.
-func TestPiProfileStaysInsideJaz(t *testing.T) {
-	root := t.TempDir()
-	layout, err := acp.PreparePiProfile(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if layout != filepath.Join(root, "acp", "pi") {
-		t.Fatalf("pi profile = %q", layout)
-	}
-	if info, err := os.Stat(layout); err != nil || !info.IsDir() {
-		t.Fatalf("pi profile must exist: %v", err)
-	}
-}
-
 // TestPiThreadsRunInJazsOwnProfile checks the wiring a real thread depends on:
 // pi's process environment names Jaz's profile, not the user's ~/.pi.
 func TestPiThreadsRunInJazsOwnProfile(t *testing.T) {
