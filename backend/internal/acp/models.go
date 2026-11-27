@@ -17,6 +17,7 @@ const sessionConfigCollaborationMode = "collaboration_mode"
 const sessionConfigModel = "model"
 const sessionConfigReasoningEffort = "reasoning_effort"
 const claudeSessionConfigEffort = "effort"
+const sessionConfigThoughtLevel = "thought_level"
 const claudeReasoningEffortUltracode = "ultracode"
 
 type ReasoningEffortOption struct {
@@ -79,6 +80,10 @@ type agentPolicy struct {
 	ultracodeSetting        bool
 	systemPromptAppendMeta  bool
 	promptSuggestions       bool
+	// mcpServersFromSession marks an adapter that receives Jaz's MCP servers
+	// in session/new and hands them to the agent's own MCP client, rather than
+	// through ACP's own MCP support.
+	mcpServersFromSession bool
 }
 
 var baseReasoningEffortOptions = []ReasoningEffortOption{
@@ -118,6 +123,19 @@ var openCodeReasoningEffortOptions = append(append([]ReasoningEffortOption(nil),
 var museReasoningEffortOptions = append(append([]ReasoningEffortOption(nil), codexReasoningEffortOptions...),
 	ReasoningEffortOption{Value: "none", Label: "None"},
 )
+
+// pi's own thinking levels, in its order: no "none" level, and "max" beyond
+// xhigh.
+var piReasoningEffortOptions = []ReasoningEffortOption{
+	{Value: "", Label: "Default"},
+	{Value: "off", Label: "Off"},
+	{Value: "minimal", Label: "Minimal"},
+	{Value: "low", Label: "Low"},
+	{Value: "medium", Label: "Medium"},
+	{Value: "high", Label: "High"},
+	{Value: "xhigh", Label: "Extra high"},
+	{Value: "max", Label: "Max"},
+}
 
 func agentPolicyForAgent(agentName string) agentPolicy {
 	switch strings.ToLower(strings.TrimSpace(agentName)) {
@@ -177,6 +195,19 @@ func agentPolicyForAgent(agentName string) agentPolicy {
 			effortConfigID:       sessionConfigReasoningEffort,
 			systemPromptAtLaunch: true,
 			effortOptions:        museReasoningEffortOptions,
+		}
+	case AgentPi:
+		// pi appends the session prompt to its own at every launch (resume
+		// included), and owns its model ids ("provider/id"), its
+		// thinking-level names, and which models it will run.
+		return agentPolicy{
+			modelConfigID:          sessionConfigModel,
+			effortConfigID:         sessionConfigThoughtLevel,
+			systemPromptAtLaunch:   true,
+			promptPersistsOnRestore: true,
+			unadvertisedModel:      unadvertisedModelRejected,
+			effortOptions:          piReasoningEffortOptions,
+			mcpServersFromSession:  true,
 		}
 	case AgentCopilot:
 		return agentPolicy{

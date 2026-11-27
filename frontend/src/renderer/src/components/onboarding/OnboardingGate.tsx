@@ -383,7 +383,8 @@ function onboardingAuth(current?: ACPAgentAuth, recommended?: ACPAgentAuth): ACP
 }
 
 function onboardingLoginAuth(agent: string, current?: ACPAgentAuth): ACPAgentAuth {
-  if (agent === 'antigravity' || agent === 'muse' || agent === 'devin') return { mode: 'existing_cli' }
+  if (agent === 'antigravity' || agent === 'muse' || agent === 'devin' || agent === 'pi')
+    return { mode: 'existing_cli' }
   if (current?.mode === 'jaz_profile') return current
   return { mode: 'jaz_profile' }
 }

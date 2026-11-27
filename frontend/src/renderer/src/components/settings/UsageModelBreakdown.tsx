@@ -368,6 +368,8 @@ function agentName(agent: string): string {
       return 'Antigravity'
     case 'jaz':
       return 'Jaz'
+    case 'pi':
+      return 'Pi'
     default:
       return agent === 'unknown' ? 'Unknown agent' : agent
   }

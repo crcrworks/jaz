@@ -94,7 +94,7 @@ func probeReadiness(name string, cfg AgentConfig, root string, env map[string]st
 		if !auth.Authenticated {
 			return Readiness{Reason: auth.Reason}
 		}
-	case AgentKimi, AgentGrok, AgentOpenCode, AgentAntigravity, AgentMuse, AgentCopilot, AgentDevin:
+	case AgentKimi, AgentGrok, AgentOpenCode, AgentAntigravity, AgentMuse, AgentCopilot, AgentPi, AgentDevin:
 		if !auth.Authenticated {
 			return Readiness{Reason: auth.Reason}
 		}

@@ -28,6 +28,9 @@ type Layout struct {
 	ACPClaudeConfig   string
 	ACPKimiHome       string
 	ACPOpenCodeConfig string
+	// ACPPiHome is pi's isolated agent directory: pi's credentials, model
+	// config and MCP servers for Jaz threads. The user's own ~/.pi stays out.
+	ACPPiHome string
 }
 
 func New(root string) Layout {
@@ -50,6 +53,7 @@ func New(root string) Layout {
 		ACPClaudeConfig:   filepath.Join(root, "acp", "claude"),
 		ACPKimiHome:       filepath.Join(root, "acp", "kimi"),
 		ACPOpenCodeConfig: filepath.Join(root, "acp", "opencode"),
+		ACPPiHome:         filepath.Join(root, "acp", "pi"),
 	}
 }
 
@@ -76,6 +80,7 @@ func Ensure(root string) (Layout, error) {
 		layout.ACPClaudeConfig,
 		layout.ACPKimiHome,
 		layout.ACPOpenCodeConfig,
+		layout.ACPPiHome,
 		layout.Connections,
 		layout.Ingest,
 	} {

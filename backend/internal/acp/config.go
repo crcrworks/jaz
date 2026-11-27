@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/wins/jaz/backend/internal/m365copilot"
+	"github.com/wins/jaz/backend/internal/pirpc"
 	mcpconfig "github.com/wins/jaz/backend/internal/mcpconfig"
 	"github.com/wins/jaz/backend/internal/modelcatalog"
 	"github.com/wins/jaz/backend/internal/plugins"
@@ -26,6 +27,8 @@ const (
 	AgentCopilot          = "copilot"
 	AgentDevin            = "devin"
 	AgentMicrosoftCopilot = m365copilot.AgentName
+	// AgentPi runs pi's own RPC mode through an in-process ACP bridge.
+	AgentPi = pirpc.AgentName
 
 	AgentProviderModeNone          = ""
 	AgentProviderModeAgentDefaults = "agent_defaults"
@@ -45,7 +48,7 @@ func CanonicalAgentName(name string) string {
 
 func AgentSupportsCompact(name string) bool {
 	switch CanonicalAgentName(name) {
-	case AgentCodex, AgentClaude, AgentDevin:
+	case AgentCodex, AgentClaude, AgentPi, AgentDevin:
 		return true
 	default:
 		return false
@@ -160,6 +163,9 @@ type AgentConfig struct {
 	// before PATH for companion CLIs. Runtime-only, never persisted.
 	AdapterBinDir string
 	LoginBinDir   string
+	// SessionID is the Jaz thread this launch serves, for adapters that must
+	// name it to Jaz's own MCP servers. Runtime-only, never persisted.
+	SessionID string
 	// ModelRequested marks Model as named by the request that starts the
 	// session rather than saved earlier. Runtime-only, never persisted.
 	ModelRequested bool
@@ -318,6 +324,7 @@ var builtinAgentOrder = []string{
 	AgentCopilot,
 	AgentDevin,
 	AgentMicrosoftCopilot,
+	AgentPi,
 }
 
 func BuiltinAgents() AgentCatalog {
@@ -368,6 +375,9 @@ func BuiltinAgents() AgentCatalog {
 			Args:    []string{"acp"},
 		},
 		AgentMicrosoftCopilot: {
+			BuiltinBridge: true,
+		},
+		AgentPi: {
 			BuiltinBridge: true,
 		},
 	}

@@ -344,6 +344,9 @@ func (m *Manager) connectWithHandler(ctx context.Context, name string, cfg Agent
 		}
 	}
 	runCtx, cancel := context.WithCancel(context.Background())
+	// An in-process bridge needs the thread its servers serve, not the caller's
+	// lifetime: the agent outlives the call that opened it.
+	cfg.SessionID = mcpsession.ID(ctx)
 	conn, stderr, err := m.openConn(runCtx, name, cfg, env, cwd, launchPrompt)
 	if err != nil {
 		cancel()
@@ -508,7 +511,7 @@ func (m *Manager) newACPSession(ctx context.Context, ac *agentConn, agent string
 	return m.newACPProtocolSession(ctx, ac, "agent", newSessionRequest{
 		Meta:       meta,
 		Cwd:        cwd,
-		MCPServers: m.mcpServersForAgent(ctx, ac.initRaw, session.RuntimeRef.MCPServerPolicy),
+		MCPServers: m.mcpServersForAgent(ctx, agent, ac.initRaw, session.RuntimeRef.MCPServerPolicy),
 	})
 }
 

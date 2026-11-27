@@ -12,6 +12,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   copilot: 'GitHub Copilot',
   devin: 'Devin',
   microsoft_copilot: 'Microsoft Copilot Work/School',
+  pi: 'Pi',
 }
 
 // Prettifies an ACP agent name for display, e.g. "claude" → "Claude".
@@ -39,6 +40,7 @@ const AUTH_PROVIDERS: Record<string, string> = {
   copilot: 'GitHub',
   devin: 'Cognition',
   microsoft_copilot: 'Microsoft Work/School',
+  pi: 'Pi',
 }
 
 export function authProviderLabel(value: string | undefined): string {
@@ -55,6 +57,7 @@ const ONBOARDING_NAMES: Record<string, string> = {
   antigravity: 'Antigravity',
   muse: 'Muse Code',
   devin: 'Devin',
+  pi: 'Pi',
 }
 
 export function onboardingAgentLabel(value: string | undefined): string {

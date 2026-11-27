@@ -58,7 +58,7 @@ func NormalizeAgentAuthConfig(name string, auth AgentAuthConfig) (AgentAuthConfi
 		return AgentAuthConfig{}, fmt.Errorf("acp agent %q auth mode %q is not supported", name, mode)
 	}
 	path := strings.TrimSpace(auth.Path)
-	if (name == AgentAntigravity || name == AgentMuse || name == AgentCopilot) && mode == AuthModeJazProfile {
+	if (name == AgentAntigravity || name == AgentMuse || name == AgentCopilot || name == AgentPi) && mode == AuthModeJazProfile {
 		mode = AuthModeAuto
 		path = ""
 	}
@@ -75,6 +75,9 @@ func NormalizeAgentAuthConfig(name string, auth AgentAuthConfig) (AgentAuthConfi
 	}
 	if name == AgentMuse && path != "" {
 		return AgentAuthConfig{}, fmt.Errorf("acp agent %q has no explicit profile path; use Muse's native configuration", name)
+	}
+	if name == AgentPi && path != "" {
+		return AgentAuthConfig{}, fmt.Errorf("acp agent %q has no explicit profile path; it always uses Jaz's own pi profile", name)
 	}
 	if name == AgentCopilot && path != "" {
 		return AgentAuthConfig{}, fmt.Errorf("acp agent %q uses its native COPILOT_HOME configuration", name)
@@ -168,6 +171,8 @@ func resolveAgentAuthWithProviders(name string, cfg AgentConfig, root string, en
 		return resolveMuseAuth(root, env)
 	case AgentCopilot:
 		return resolveCopilotAuth(env)
+	case AgentPi:
+		return resolvePiAuth(cfg, root, env)
 	case AgentDevin:
 		return resolveDevinAuth(env)
 	case AgentMicrosoftCopilot:
@@ -526,8 +531,8 @@ func DisconnectAgentAuth(ctx context.Context, name string, cfg AgentConfig, root
 		return disconnectAntigravityAuth(ctx, cfg, root)
 	case AgentMuse:
 		return disconnectMuseAuth(ctx, cfg, root)
-	case AgentCopilot:
-		return ManualDisconnectError(agentManualDisconnect(name, cfg))
+	case AgentCopilot, AgentPi:
+		return ManualDisconnectError(agentManualDisconnect(name, cfg, root))
 	case AgentDevin:
 		return disconnectDevinAuth(ctx, cfg)
 	case AgentMicrosoftCopilot:
@@ -538,7 +543,11 @@ func DisconnectAgentAuth(ctx context.Context, name string, cfg AgentConfig, root
 	}
 }
 
-func agentManualDisconnect(name string, cfg AgentConfig) string {
+func agentManualDisconnect(name string, cfg AgentConfig, root string) string {
+	if CanonicalAgentName(name) == AgentPi {
+		return fmt.Sprintf("To sign pi out, run %s on the Jaz server.", shellCommand("pi", "auth", "logout", "<provider>")) +
+			fmt.Sprintf(" Set PI_CODING_AGENT_DIR=%s first.", shellQuote(runtimefiles.New(root).ACPPiHome))
+	}
 	if CanonicalAgentName(name) == AgentCopilot {
 		command, err := resolveLoginExecutable(loginBinDirs(cfg), "copilot")
 		if err != nil {
