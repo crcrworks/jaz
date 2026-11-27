@@ -215,6 +215,27 @@ describe('modelReasoningSelection', () => {
     expect(selection.effectiveEffort).toBe('none')
     expect(selection.supported).toBeTrue()
   })
+  // The picker used to answer every model it could not place with the same
+  // "No effort levels", which read as a Jaz bug rather than the model's own
+  // answer. What is known now reaches the picker.
+  test('says why a model leaves no level to choose', () => {
+    const catalog = (suggestions) => ({ status: 'ready', suggestions })
+
+    expect(modelReasoningSelection({ ...input, catalog: catalog([]) }).why).toBe('')
+    expect(modelReasoningSelection({
+      ...input,
+      catalog: catalog([{ value: 'gpt-test', label: 'Test', reasoning: { status: 'unavailable' } }]),
+    }).why).toBe('This model has no thinking levels')
+    expect(modelReasoningSelection({
+      ...input,
+      catalog: catalog([{ value: 'gpt-test', label: 'Test', reasoning: { status: 'ready', efforts: [] } }]),
+    }).why).toBe('This model has no thinking levels')
+    expect(modelReasoningSelection({
+      ...input,
+      catalog: catalog([{ value: 'gpt-test', label: 'Test', reasoning: { status: 'ready', efforts: ['low', 'high'] } }]),
+    }).why).toBe('')
+    expect(modelReasoningSelection({ ...input, catalog: { status: 'pending' } }).why).toBe('Loading thinking levels…')
+  })
 })
 
 describe('withConfiguredEffort', () => {

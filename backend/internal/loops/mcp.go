@@ -213,7 +213,7 @@ type MCPCreateInput struct {
 	ACPAgent        string   `json:"acp_agent,omitempty" jsonschema:"ACP agent that runs the loop; see this tool's description for the available agents. Omit to use the workspace default agent."`
 	ModelProvider   string   `json:"model_provider,omitempty"`
 	Model           string   `json:"model,omitempty"`
-	ReasoningEffort string   `json:"reasoning_effort,omitempty" jsonschema:"none, minimal, low, medium, high, xhigh, max"`
+	ReasoningEffort string   `json:"reasoning_effort,omitempty" jsonschema:"none, off, minimal, low, medium, high, xhigh, max"`
 	Directory       string   `json:"directory,omitempty" jsonschema:"workspace-relative or absolute directory for loop runs"`
 	BoardIDs        []string `json:"board_ids,omitempty" jsonschema:"board ids to place this loop's widget on; assignment is what enables the widget. Use loop_boards to list ids."`
 	Bot             string   `json:"bot,omitempty" jsonschema:"id of the bot that owns the routine; defaults to the calling bot. A routine on a board belongs to the board"`
@@ -254,7 +254,7 @@ type MCPUpdateInput struct {
 	ACPAgent        *string   `json:"acp_agent,omitempty" jsonschema:"ACP agent that runs the loop; see this tool's description for the available agents."`
 	ModelProvider   *string   `json:"model_provider,omitempty"`
 	Model           *string   `json:"model,omitempty"`
-	ReasoningEffort *string   `json:"reasoning_effort,omitempty" jsonschema:"none, minimal, low, medium, high, xhigh, max"`
+	ReasoningEffort *string   `json:"reasoning_effort,omitempty" jsonschema:"none, off, minimal, low, medium, high, xhigh, max"`
 	Directory       *string   `json:"directory,omitempty"`
 	Trigger         *Trigger  `json:"trigger,omitempty" jsonschema:"switch the routine to an event trigger; setting schedule switches it back"`
 	WhenMissed      *string   `json:"when_missed,omitempty" jsonschema:"skip or catch_up; see loop_create"`

@@ -212,6 +212,7 @@ function LoopPromptCard({
     modelsLoading,
     reasoningOptions: effortOptions,
     effectiveReasoningEffort: reasoningEffort,
+    reasoningWhy,
   } = useModelReasoningState({
     settings: agentSettings,
     agent: draft.runtime,
@@ -264,6 +265,7 @@ function LoopPromptCard({
                 onChange={(next) => set({ model: next.model, reasoningEffort: next.effort })}
                 effort={reasoningEffort}
                 effortOptions={pickerEffortOptions(effortOptions)}
+                effortWhy={reasoningWhy}
               />
             ) : null}
           </div>

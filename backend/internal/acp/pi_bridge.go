@@ -60,7 +60,8 @@ func (m *Manager) piModels(ctx context.Context, cfg AgentConfig) (pirpc.ModelCat
 }
 
 // piModelCatalog reports pi's own model list, with pi's context limits and
-// thinking levels. A model pi states nothing about keeps an empty value.
+// thinking levels. A model pi says does not reason offers no level, and one pi
+// describes keeps exactly the levels pi would run it at.
 func (m *Manager) piModelCatalog(ctx context.Context, cfg AgentConfig) (AgentModelCatalog, error) {
 	if piCommand(cfg) == "" {
 		return AgentModelCatalog{}, pirpc.ErrNoExecutable
@@ -71,17 +72,18 @@ func (m *Manager) piModelCatalog(ctx context.Context, cfg AgentConfig) (AgentMod
 	}
 	result := AgentModelCatalog{Models: make([]AgentModel, 0, len(catalog.Models))}
 	for _, model := range catalog.Models {
+		reasoning := ReasoningCapabilities{Status: modelcatalog.ReasoningUnavailable, Scope: ReasoningScopeAgent}
+		if model.Reasoning {
+			reasoning.Status = modelcatalog.ReasoningReady
+			reasoning.Efforts = model.Levels
+		}
 		result.Models = append(result.Models, AgentModel{
 			Value:           model.ID,
 			Label:           model.Label,
 			Description:     model.Provider,
 			ContextLength:   model.ContextLength,
 			InputModalities: model.Inputs,
-			Reasoning: ReasoningCapabilities{
-				Status:  modelcatalog.ReasoningUnavailable,
-				Scope:   ReasoningScopeAgent,
-				Efforts: model.Levels,
-			},
+			Reasoning:       reasoning,
 		})
 	}
 	return result, nil

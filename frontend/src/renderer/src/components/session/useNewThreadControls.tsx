@@ -49,6 +49,7 @@ export function useNewThreadControls() {
     effectiveReasoningEffort: effort,
     reasoningStatus,
     reasoningBlocked,
+    reasoningWhy,
   } = useModelReasoningState({
     settings: agentSettings,
     agent: runtime,
@@ -87,6 +88,7 @@ export function useNewThreadControls() {
     modelsLoading,
     reasoningStatus,
     reasoningBlocked,
+    reasoningWhy,
     // ready means a start now uses the settled agent and model, or reports why it cannot.
     ready: runtimeReady && (!runtimeAvailable || agents.includes(runtime)) && !(reasoningBlocked && reasoningStatus === 'pending'),
     setSelection,
@@ -135,6 +137,7 @@ export function AgentModelControls({
         loading: controls.modelsLoading,
         effort: controls.effort,
         effortOptions: pickerEffortOptions(controls.effortOptions),
+        effortWhy: controls.reasoningWhy,
         fastMode: controls.fastMode ? { ...controls.fastMode, disabled } : undefined,
       }
     : { value: '', suggestions: [], effort: '', effortOptions: [] }

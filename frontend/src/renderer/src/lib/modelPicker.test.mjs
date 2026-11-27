@@ -22,6 +22,10 @@ test('picker only offers efforts the selected model supports, with Max on top wh
   expect(pickerEffortOptions(options(['none', 'high'])).map(({ value }) => value)).toEqual(['none', 'high'])
   // "None" turns thinking off, so it needs a level beside it to turn off.
   expect(pickerEffortOptions(options(['none']))).toEqual([])
+  // pi names the same switch "off", which its own slider keeps as the first stop.
+  expect(pickerEffortOptions(options(['off', 'low', 'medium', 'high', 'xhigh', 'max'])).map(({ value }) => value))
+    .toEqual(['off', 'low', 'medium', 'high', 'xhigh'])
+  expect(pickerEffortOptions(options(['off']))).toEqual([])
   expect(pickerEffortOptions([])).toEqual([])
 })
 

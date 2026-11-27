@@ -97,6 +97,7 @@ export function ModelSelect({
   effort,
   suggestions,
   effortOptions,
+  effortWhy,
   agent,
   loading,
   disabled,
@@ -109,6 +110,8 @@ export function ModelSelect({
   effort: string
   suggestions: ModelPickerOption[]
   effortOptions: ReasoningEffortOption[]
+  // why says why a model leaves no level to choose, when that is known.
+  effortWhy?: string
   // Puts the agent's logo on the button and, with several options, agent tabs in the picker.
   agent?: AgentChoice
   loading?: boolean
@@ -204,7 +207,7 @@ export function ModelSelect({
           {listed || adjustable || fastMode ? (
             <div className={`px-1 pt-1 ${listed ? 'mt-1.5 border-t border-border' : ''}`}>
               <div className="flex h-6 items-center px-1.5 text-[12px] font-medium">
-                <Roll value={effortLabel || 'No effort levels'} direction={effortDirection} className={effortClass || (effortLabel ? 'text-ink' : 'font-normal text-ink-3')} />
+                <Roll value={effortLabel || effortWhy || 'No effort levels'} direction={effortDirection} className={effortClass || (effortLabel ? 'text-ink' : 'font-normal text-ink-3')} />
                 {fastMode ? (
                   <button
                     type="button"

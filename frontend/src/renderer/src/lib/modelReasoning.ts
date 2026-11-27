@@ -22,6 +22,8 @@ export interface ModelReasoningState {
   reasoningEffortSupported: boolean
   reasoningStatus: ModelReasoningSelection['status']
   reasoningBlocked: boolean
+  // reasoningWhy says why the model offers no level to choose.
+  reasoningWhy: string
   reasoningForModel: (model: string, effort: string) => ModelReasoningSelection
 }
 
@@ -72,6 +74,7 @@ export function useModelReasoningState({
     reasoningEffortSupported: reasoning.supported,
     reasoningStatus: reasoning.status,
     reasoningBlocked: reasoning.blocked,
+    reasoningWhy: reasoning.why,
     reasoningForModel,
   }
 }
