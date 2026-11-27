@@ -45,3 +45,13 @@ provider's `/models` list says, and a level invented here would be exactly the
 guess this decision refuses. A model pi describes itself — or one a person
 declared with `reasoning` and `thinkingLevelMap` in that profile's
 `models.json` — keeps the levels pi reports for it.
+
+## A level a picker offers is a level a routine stores
+
+A routine's `reasoning_effort` is accepted from the same list of levels agents
+advertise, now including pi's `off`. Before this, the picker could offer `Off`
+for a pi model while the routine refused to store it, so creating the routine
+failed outright. `off` and `none` stay distinct names: pi runs its own level
+called `off`, and `none` is Jaz's clear-the-effort value. Whether a run actually
+takes the stored level is still the agent's own session check at spawn, so a
+level the model does not offer is refused there rather than guessed here.

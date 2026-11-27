@@ -257,14 +257,20 @@ func normalizeStatus(status string) string {
 	}
 }
 
+// loopReasoningEfforts are the levels a routine may name. It is every level an
+// agent advertises, including pi's own "off", so a routine stores what the
+// picker offered rather than refusing it. Whether the agent and model of a run
+// actually take it stays the agent's own check at spawn.
+const loopReasoningEfforts = "none, off, minimal, low, medium, high, xhigh, max"
+
 func normalizeReasoningEffort(value string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
+	switch effort := strings.ToLower(strings.TrimSpace(value)); effort {
 	case "":
 		return "", nil
-	case "none", "minimal", "low", "medium", "high", "xhigh", "max":
-		return strings.ToLower(strings.TrimSpace(value)), nil
+	case "none", "off", "minimal", "low", "medium", "high", "xhigh", "max":
+		return effort, nil
 	default:
-		return "", fmt.Errorf("unknown reasoning effort %q; valid values are none, minimal, low, medium, high, xhigh, max", value)
+		return "", fmt.Errorf("unknown reasoning effort %q; valid values are %s", value, loopReasoningEfforts)
 	}
 }
 
