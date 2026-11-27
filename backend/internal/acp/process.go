@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/url"
 	"os"
 	"os/exec"
@@ -21,7 +22,6 @@ import (
 	"github.com/wins/jaz/backend/internal/m365copilot"
 	"github.com/wins/jaz/backend/internal/pirpc"
 	"github.com/wins/jaz/backend/internal/processenv"
-	"github.com/wins/jaz/backend/internal/runtimefiles"
 	"github.com/wins/jaz/backend/internal/subprocess"
 )
 
@@ -462,13 +462,12 @@ func (m *Manager) buildProcessEnv(name string, agent AgentConfig, prepare bool) 
 	if name == AgentPi {
 		processenv.PreserveHost(env, "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "LANG", "LC_ALL", "LC_CTYPE", "TERM")
 		// pi keeps its credentials in its own agent directory, so Jaz points it
-		// at its own copy instead of the user's ~/.pi.
-		env["PI_CODING_AGENT_DIR"] = runtimefiles.New(root).ACPPiHome
-		env["PI_SKIP_VERSION_CHECK"] = "1"
+		// at its own copy instead of the user's ~/.pi, and gives it the
+		// providers Jaz knows about there.
+		maps.Copy(env, piProfileEnv(root))
+		_, err := PreparePiProfile(root, env, m.providers(), agent.ProviderQualifiedModel())
 		if prepare {
-			if err := os.MkdirAll(env["PI_CODING_AGENT_DIR"], 0o700); err != nil {
-				prepareErr = firstError(prepareErr, fmt.Errorf("prepare pi profile %s: %w", env["PI_CODING_AGENT_DIR"], err))
-			}
+			prepareErr = firstError(prepareErr, err)
 		}
 	}
 	if prepare {
