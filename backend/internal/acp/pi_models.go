@@ -64,7 +64,16 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 		if key == "" && keyEnv != "" {
 			key = modelProviderKeyValue(root, env, keyEnv)
 		}
+		if key != "" && keyEnv != "" {
+			// pi reads a provider's key from its own variable, whether pi
+			// describes the provider or Jaz declares it below, so the key is
+			// bound for both. models.json only ever names the variable.
+			env[keyEnv] = key
+			supplied = append(supplied, resolved.ID)
+		}
 		if resolved.BuiltIn && !resolved.Meta.OpenAICompatible {
+			// pi carries this provider's api and model list itself; a models.json
+			// entry would replace them with a narrower copy.
 			continue
 		}
 		if !resolved.Meta.SupportsCapability(modelprovider.CapabilityChatCompletions) {
@@ -81,11 +90,7 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 		apiKey := ""
 		switch {
 		case key != "" && keyEnv != "":
-			// pi interpolates $NAME in models.json from its own environment, so
-			// the key stays in the env Jaz already hands the process.
-			env[keyEnv] = key
 			apiKey = "$" + keyEnv
-			supplied = append(supplied, resolved.ID)
 		case !resolved.Meta.RequiresAPIKey:
 			// pi needs a key present to offer the model; an endpoint that does
 			// not authenticate ignores the dummy value pi documents.
@@ -100,17 +105,16 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 			Models:  models,
 		}
 	}
-	if len(file.Providers) == 0 {
-		return nil, nil
-	}
-	data, err := json.MarshalIndent(file, "", "  ")
-	if err != nil {
-		return nil, err
-	}
-	path := filepath.Join(home, "models.json")
-	if current, err := os.ReadFile(path); err != nil || !bytes.Equal(current, data) {
-		if err := os.WriteFile(path, data, 0o600); err != nil {
-			return nil, fmt.Errorf("write pi models %s: %w", path, err)
+	if len(file.Providers) > 0 {
+		data, err := json.MarshalIndent(file, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		path := filepath.Join(home, "models.json")
+		if current, err := os.ReadFile(path); err != nil || !bytes.Equal(current, data) {
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				return nil, fmt.Errorf("write pi models %s: %w", path, err)
+			}
 		}
 	}
 	sort.Strings(supplied)

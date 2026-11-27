@@ -13,6 +13,15 @@ import (
 	"github.com/wins/jaz/backend/internal/provider"
 )
 
+// clearProviderEnv drops the provider variables host shells export, so a test
+// sees only the keys it configures itself.
+func clearProviderEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{"OPENAI_API_KEY", "OPENROUTER_API_KEY", "JAZ_PROVIDER_COMMANDCODE_API_KEY"} {
+		t.Setenv(key, "")
+	}
+}
+
 // piProviderServer is the OpenAI-compatible provider a test profile points at:
 // it advertises two models and requires the key Jaz binds.
 func piProviderServer(t *testing.T, key string) *httptest.Server {
@@ -36,6 +45,7 @@ func piProviderServer(t *testing.T, key string) *httptest.Server {
 }
 
 func TestPreparePiProfileSuppliesModelProviders(t *testing.T) {
+	clearProviderEnv(t)
 	root := t.TempDir()
 	const key = "provider-secret-key"
 	server := piProviderServer(t, key)
@@ -96,6 +106,7 @@ func TestPreparePiProfileSuppliesModelProviders(t *testing.T) {
 // no key for is still declared: pi's own `auth login` for that provider needs
 // the declaration, and a stored pi credential outranks models.json.
 func TestPreparePiProfileDeclaresProviderWithoutKey(t *testing.T) {
+	clearProviderEnv(t)
 	providers := map[string]provider.ModelProviderConfig{
 		"commandcode": {Type: "openai-compatible", BaseURL: "https://provider.test/v1", DefaultModel: "gpt-6-luna"},
 	}
@@ -121,17 +132,23 @@ func TestPreparePiProfileDeclaresProviderWithoutKey(t *testing.T) {
 	}
 }
 
-// TestPreparePiProfileLeavesBuiltinProvidersToPi pins that a built-in provider
-// pi already describes is not declared: a models.json entry would replace pi's
-// own api and model list with a narrower one.
-func TestPreparePiProfileLeavesBuiltinProvidersToPi(t *testing.T) {
+// TestPreparePiProfileBindsBuiltinProviderKey pins the acceptance criterion for
+// a provider pi describes itself: the key reaches pi's own environment variable
+// (pi reads OPENAI_API_KEY), while models.json stays untouched so pi keeps its
+// own api and model list.
+func TestPreparePiProfileBindsBuiltinProviderKey(t *testing.T) {
+	clearProviderEnv(t)
 	root := t.TempDir()
+	env := map[string]string{}
 	providers := map[string]provider.ModelProviderConfig{
 		"openai": {APIKey: "openai-secret"},
 	}
-	supplied, err := acp.PreparePiProfile(root, map[string]string{}, providers, "openai/gpt-6-luna")
-	if err != nil || len(supplied) != 0 {
+	supplied, err := acp.PreparePiProfile(root, env, providers, "openai/gpt-6-luna")
+	if err != nil || len(supplied) != 1 || supplied[0] != "openai" {
 		t.Fatalf("supplied = %v, err = %v", supplied, err)
+	}
+	if env["OPENAI_API_KEY"] != "openai-secret" {
+		t.Fatalf("built-in provider key did not reach pi's env: %v", env)
 	}
 	if _, err := os.Stat(filepath.Join(root, "acp", "pi", "models.json")); !os.IsNotExist(err) {
 		t.Fatalf("built-in provider must not be declared: %v", err)
@@ -141,6 +158,7 @@ func TestPreparePiProfileLeavesBuiltinProvidersToPi(t *testing.T) {
 // TestPreparePiProfileWithoutProvidersWritesNoModels pins that a Jaz with no
 // provider configured leaves pi's own profile alone.
 func TestPreparePiProfileWithoutProvidersWritesNoModels(t *testing.T) {
+	clearProviderEnv(t)
 	root := t.TempDir()
 	supplied, err := acp.PreparePiProfile(root, map[string]string{}, nil, "")
 	if err != nil || len(supplied) != 0 {

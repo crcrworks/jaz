@@ -10,12 +10,17 @@ run `commandcode/deepseek/deepseek-v4.1-flash` at all.
 
 ## What Jaz writes
 
-`PreparePiProfile` builds `<root>/acp/pi/models.json` from Jaz's effective
-provider set and returns the providers it handed pi a key for.
+`PreparePiProfile` binds the key of every provider Jaz holds into the pi
+process's environment, and declares in `<root>/acp/pi/models.json` the providers
+pi does not describe itself. It returns the providers it handed pi a key for.
 
+- The key always travels in the provider's own variable (`OPENAI_API_KEY`,
+  `JAZ_PROVIDER_COMMANDCODE_API_KEY`, …), which is the one pi reads. That is
+  true for a built-in provider too: `openai` and `openrouter` are told nothing
+  else, and pi keeps its own api and model list.
 - Only providers pi does not describe itself are declared. A declaration for a
   built-in provider would replace pi's own `api` and model list with a narrower
-  copy, so built-ins get nothing but the environment variable pi already reads.
+  copy.
 - A declaration carries `baseUrl`, `api: "openai-completions"`, the provider's
   headers, and Jaz's model list for it; an endpoint that needs no key gets the
   dummy `none` pi documents.

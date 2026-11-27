@@ -78,7 +78,16 @@ case "$declared" in
   "") key="" ;;
   *) key=declared ;;
 esac
-if [ "$builtin" = 1 ] || [ -n "$key" ]; then
+if [ -z "$key" ]; then
+  # A built-in provider is ready only when pi's own variable carries a key, the
+  # same way real pi reads OPENAI_API_KEY / OPENROUTER_API_KEY.
+  case "$provider" in
+    openai) variable=OPENAI_API_KEY ;;
+    openrouter) variable=OPENROUTER_API_KEY ;;
+  esac
+  [ -n "$variable" ] && [ -n "$(printenv "$variable")" ] && key=variable
+fi
+if [ -n "$key" ]; then
   printf '{"status":"ready","provider":"%s","authType":"api_key"}\n' "$provider"
   exit 0
 fi
@@ -97,6 +106,29 @@ exit 1
 		}
 	}
 	t.Setenv("PATH", path)
+}
+
+// TestPiAuthBindsBuiltinProviderKey is the acceptance criterion for a provider
+// pi describes itself: the key in Settings > Model Providers must reach pi's own
+// environment variable, else pi is told to add the key it already has.
+func TestPiAuthBindsBuiltinProviderKey(t *testing.T) {
+	clearHostEnv(t)
+	fakePi(t)
+	for _, test := range []struct {
+		provider string
+		model    string
+	}{
+		{"openai", "gpt-6-luna"},
+		{"openrouter", "z-ai/glm-5.2"},
+	} {
+		cfg := piConfig(test.provider, test.model)
+		auth, readiness := ProbeAuthAndReadinessWithProviders(AgentPi, cfg, t.TempDir(), nil, map[string]modelprovider.ModelProviderConfig{
+			test.provider: {APIKey: test.provider + "-secret"},
+		})
+		if !auth.Authenticated || !readiness.Available || auth.AuthKind != AuthKindAPIKey || auth.AuthEvidence != "pi_auth_check" {
+			t.Fatalf("%s + Model Providers = %#v / %#v", test.provider, auth, readiness)
+		}
+	}
 }
 
 // TestPiAuthUsesModelProviderKeys is the acceptance criterion for a provider Jaz
