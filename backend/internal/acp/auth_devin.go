@@ -85,7 +85,11 @@ func resolveDevinAuth(env map[string]string) resolvedAgentAuth {
 func disconnectDevinAuth(ctx context.Context, cfg AgentConfig) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	command, args := launchCommand("devin", []string{"auth", "logout"})
+	command, err := resolveLoginExecutable(loginBinDirs(cfg), "devin")
+	if err != nil {
+		return err
+	}
+	command, args := launchCommand(command, []string{"auth", "logout"})
 	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Env = processenv.List(NewManager(nil, Config{}, nil).probeEnv(AgentDevin, cfg))
 	if err := cmd.Run(); err != nil {
