@@ -14,13 +14,21 @@ session config options own the model and thought level.
 - **Prompt.** Devin advertises no session system-prompt channel. Its always-on
   rules are `$WINDSURF_CODEIUM_DIR/memories/global_rules.md`, so each launch gets
   a temporary Codeium directory holding the user's rules with Jaz's prompt
-  appended, as Devin's own rule files are composed, beside links to the user's
-  other global rules. Nothing rides session `_meta`.
+  appended, as Devin's own rule files are composed. Every other entry of the
+  user's Codeium directory is linked into the view, so Devin keeps the MCP
+  servers, skills, and settings the user gave it. Nothing rides session `_meta`.
 - **Model and effort.** Devin advertises `model`, `thought_level`, `speed`, and
   its five modes through `session/new`. Jaz sends the configured model and
   thought level through `session/config/set_option` and refuses one Devin does
   not list; an account that advertises no models reports an empty catalogue
-  rather than a guessed list.
+  rather than a guessed list. A session only describes the thought levels of the
+  model it runs, so discovery selects each model in turn and keeps the levels
+  that session returned; a model that advertises none reports unavailable rather
+  than borrowing another model's levels.
+- **Sign-in.** Jaz counts Devin as signed in only when Devin's
+  `credentials.toml` carries a `windsurf_api_key`. Devin itself also reports
+  "Logged in (via API key)" for an empty key, so Jaz stays on the cautious side
+  and asks for `devin auth login` until a key is stored.
 - **Modes.** Devin's own mode set is used unchanged, so the baseline is its
   `accept-edits` and Plan mode is used because Devin advertises `plan`. `bypass`
   is offered by Devin but never selected unless the mode policy picks it.

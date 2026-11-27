@@ -3,6 +3,7 @@ package acp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -14,9 +15,10 @@ import (
 // devinModels reads the models Devin offers the signed-in account from a
 // throwaway session's config options. Devin lists the model and its thought
 // levels itself, so an account that offers none reports an empty catalogue
-// rather than a guessed list.
+// rather than a guessed list. Each model is selected in turn because a session
+// advertises the thought levels of the model it runs, not of the rest.
 func (m *Manager) devinModels(ctx context.Context, cfg AgentConfig) (AgentModelCatalog, error) {
-	deadline, cancel := context.WithTimeout(ctx, 15*time.Second)
+	deadline, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	cwd := filepath.Join(firstNonEmpty(m.cfg.Root, filepath.Join(os.TempDir(), "jaz")), "acp", "model-discovery")
 	if err := os.MkdirAll(cwd, 0o700); err != nil {
@@ -45,7 +47,7 @@ func (m *Manager) devinModels(ctx context.Context, cfg AgentConfig) (AgentModelC
 	if err := json.Unmarshal(raw, &session); err != nil {
 		return AgentModelCatalog{}, err
 	}
-	closeSession(deadline, ac, session.SessionID)
+	defer closeSession(deadline, ac, session.SessionID)
 	state := parseSessionConfigOptions(raw)
 	catalog := AgentModelCatalog{Models: []AgentModel{}, DefaultModel: state.currentModel}
 	for _, option := range session.Options {
@@ -53,6 +55,16 @@ func (m *Manager) devinModels(ctx context.Context, cfg AgentConfig) (AgentModelC
 			continue
 		}
 		for _, choice := range option.Options {
+			if state.currentModel != choice.Value {
+				raw, err = setSessionConfigOption(deadline, ac.peer, session.SessionID, option.ID, choice.Value)
+				if err != nil {
+					return AgentModelCatalog{}, err
+				}
+				state = parseSessionConfigOptions(raw)
+				if state.currentModel != choice.Value {
+					return AgentModelCatalog{}, fmt.Errorf("Devin did not select model %q", choice.Value)
+				}
+			}
 			model := AgentModel{Value: choice.Value, Label: choice.Name,
 				Reasoning: ReasoningCapabilities{Status: modelcatalog.ReasoningUnavailable, Scope: ReasoningScopeAgent}}
 			if len(state.effortOptions) > 0 {

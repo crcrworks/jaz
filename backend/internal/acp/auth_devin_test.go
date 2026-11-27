@@ -70,6 +70,13 @@ func TestDevinRulesViewCarriesJazPromptBesideUserRules(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "memories", "other.md"), []byte("other\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// Devin keeps its MCP servers and settings beside memories/, so the view
+	// must carry them too: losing them would silently drop the user's own tools.
+	mcpConfig := filepath.Join(source, "mcp_config.json")
+	if err := os.WriteFile(mcpConfig, []byte(`{"mcpServers":{}}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	launchEnv := map[string]string{}
 	for key, value := range env {
@@ -93,6 +100,9 @@ func TestDevinRulesViewCarriesJazPromptBesideUserRules(t *testing.T) {
 	}
 	if linked, err := os.Readlink(filepath.Join(view, "memories", "other.md")); err != nil || linked != filepath.Join(source, "memories", "other.md") {
 		t.Fatalf("other rule link = %q, %v", linked, err)
+	}
+	if linked, err := os.Readlink(filepath.Join(view, "mcp_config.json")); err != nil || linked != mcpConfig {
+		t.Fatalf("mcp config link = %q, %v", linked, err)
 	}
 	if original, _ := os.ReadFile(filepath.Join(source, "memories", "global_rules.md")); string(original) != "user rule\n" {
 		t.Fatalf("user's own rules were rewritten: %q", original)

@@ -88,10 +88,9 @@ func promptWithModules(base string, modules promptmodule.Modules) string {
 //     use this session metadata path.
 //   - kimi (Jaz fork) appends a _meta.systemPrompt string to its native system
 //     prompt without persisting it in conversation history.
-//   - devin reads always-on rules from WINDSURF_CODEIUM_DIR and never a session
-//     _meta prompt, so the prompt rides its rules file instead.
 //
-// Unknown agents get the codex-style bare string.
+// Unknown agents get the codex-style bare string; agents that read their prompt
+// at launch, such as devin's rules file, never reach this.
 func systemPromptMeta(agent, prompt string, fresh bool) map[string]any {
 	switch CanonicalAgentName(agent) {
 	case AgentClaude:
@@ -104,8 +103,6 @@ func systemPromptMeta(agent, prompt string, fresh bool) map[string]any {
 		return map[string]any{"rules": prompt}
 	case AgentAntigravity:
 		return map[string]any{"antigravity": map[string]any{"systemPrompt": map[string]any{"append": prompt}}}
-	case AgentDevin:
-		return nil
 	default:
 		return map[string]any{"systemPrompt": prompt}
 	}
