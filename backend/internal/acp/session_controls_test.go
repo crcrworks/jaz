@@ -444,3 +444,40 @@ func TestRestoredChoicesStartOverAtAnAgentSwitch(t *testing.T) {
 		t.Fatalf("a pick made after the switch was lost: %+v", cfg)
 	}
 }
+
+// OpenCode reports the level a model runs at by default as "default", which is
+// Jaz's own "no effort chosen" rather than a level to store: recording it pinned
+// the thread to a level the picker never showed, so a worked turn looked like it
+// had dropped the configured effort.
+func TestOpenCodeDefaultLevelIsNoChosenEffort(t *testing.T) {
+	store, err := jsonstore.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := store.CreateSession(storage.CreateSession{Slug: "opencode-default", Runtime: storage.RuntimeACP})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := NewManager(store, Config{}, nil)
+	job := &jobState{Job: Job{ID: session.ID, ACPAgent: AgentOpenCode, ACPSession: "native"}}
+	manager.addJob(job, nil)
+	manager.applyUpdate("native", json.RawMessage(`{"configOptions":[
+		{"id":"model","category":"model","type":"select","currentValue":"commandcode/deepseek/deepseek-v4.1-flash","options":[{"value":"commandcode/deepseek/deepseek-v4.1-flash"}]},
+		{"id":"effort","category":"thought_level","type":"select","currentValue":"default","options":[{"value":"low"},{"value":"medium"},{"value":"default"}]}]}`))
+	loaded, err := store.LoadSession(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.ReasoningEffort != "" || loaded.ReasoningEffort != "" {
+		t.Fatalf("default level stored as a chosen effort: runtime=%q stored=%q", job.ReasoningEffort, loaded.ReasoningEffort)
+	}
+	manager.applyUpdate("native", json.RawMessage(`{"configOptions":[
+		{"id":"model","category":"model","type":"select","currentValue":"commandcode/deepseek/deepseek-v4.1-flash","options":[{"value":"commandcode/deepseek/deepseek-v4.1-flash"}]},
+		{"id":"effort","category":"thought_level","type":"select","currentValue":"medium","options":[{"value":"low"},{"value":"medium"},{"value":"default"}]}]}`))
+	if loaded, err = store.LoadSession(session.ID); err != nil {
+		t.Fatal(err)
+	}
+	if loaded.ReasoningEffort != "medium" {
+		t.Fatalf("chosen effort = %q after a real level, want medium", loaded.ReasoningEffort)
+	}
+}

@@ -9,6 +9,7 @@ import { BottomDock } from '@/components/session/BottomDock'
 import { UserBubble } from '@/components/session/Bubble'
 import { Composer, PlanDecisionCard } from '@/components/session/Composer'
 import { NativeModelOptions } from '@/components/session/NativeModelOptions'
+import { SessionNotices } from '@/components/session/SessionNotices'
 import { useSessionConfig } from '@/components/session/useSessionConfig'
 import { SelectionContextToolbar } from '@/components/session/SelectionContextToolbar'
 import { useComposerContexts } from '@/components/session/useComposerContexts'
@@ -713,7 +714,10 @@ export function ThreadView({
                     streaming={sessionRunning}
                     suggestedPrompt={derived.suggestedPrompt}
                     commands={derived.agentSession?.commands ?? undefined}
-                    optionsSlot={<NativeModelOptions options={derived.agentSession?.config_options} running={sessionRunning} pending={config.isPending} onChange={(id, value) => config.mutate({ id, value })} />}
+                    optionsSlot={<>
+                      <SessionNotices notices={derived.agentSession?.notices} />
+                      <NativeModelOptions options={derived.agentSession?.config_options} running={sessionRunning} pending={config.isPending} onChange={(id, value) => config.mutate({ id, value })} />
+                    </>}
                     chat={chat !== undefined}
                     planAvailable={planAvailable}
                     planModeActive={Boolean(live?.planRequested) || planActive}
