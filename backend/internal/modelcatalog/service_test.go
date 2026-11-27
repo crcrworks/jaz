@@ -238,6 +238,11 @@ func TestServiceFetchesAuthenticatedCustomProviderModels(t *testing.T) {
 		models[1].Value != "qwen3-coder-plus" || models[1].Label != "Qwen3 Coder Plus" || models[2].Value != "qwen3-max" {
 		t.Fatalf("models = %#v", models)
 	}
+	for _, model := range models {
+		if model.Reasoning.Status != ReasoningUnknown {
+			t.Fatalf("model %q reasoning = %q, want unknown", model.Value, model.Reasoning.Status)
+		}
+	}
 
 	fallback := NewServiceWithAPIKeyLookup(provider.StaticSource(map[string]provider.ModelProviderConfig{
 		"qwen-cloud": {
@@ -266,7 +271,9 @@ func TestServiceKeepsOllamaModelsWhenShowIsUnavailable(t *testing.T) {
 	models, err := NewService(provider.StaticSource(map[string]provider.ModelProviderConfig{
 		provider.ProviderOllama: {BaseURL: upstream.URL + "/v1"},
 	})).ProviderModels(provider.ProviderOllama)
-	if err != nil || len(models) != 1 || models[0].Reasoning.Status != ReasoningUnavailable {
+	// A listing names a model but says nothing about its thinking, which is not
+	// the same as the model having none.
+	if err != nil || len(models) != 1 || models[0].Reasoning.Status != ReasoningUnknown {
 		t.Fatalf("models = %#v, err = %v", models, err)
 	}
 }
@@ -396,4 +403,23 @@ func warmOpenRouterTestService(t *testing.T, body string) *Service {
 		t.Fatal(err)
 	}
 	return service
+}
+
+// A provider listing that omits a model the OpenRouter catalog would describe,
+// or that has no listing at all, leaves that model's reasoning unknown rather
+// than reporting it as a model that cannot reason.
+func TestServiceLeavesUndescribedModelsUnknown(t *testing.T) {
+	service := warmOpenRouterTestService(t, `{"data":[{"id":"openai/gpt-6-sol","reasoning":{"supported_efforts":["high"]}}]}`)
+	for _, model := range service.AgentModels("codex") {
+		switch model.Value {
+		case provider.OpenAIModelGPT6Sol:
+			if model.Reasoning.Status != ReasoningReady {
+				t.Fatalf("%s reasoning = %q, want the catalog's levels", model.Value, model.Reasoning.Status)
+			}
+		case provider.DefaultOpenAIModel:
+			if model.Reasoning.Status != ReasoningUnknown {
+				t.Fatalf("%s reasoning = %q, want unknown", model.Value, model.Reasoning.Status)
+			}
+		}
+	}
 }

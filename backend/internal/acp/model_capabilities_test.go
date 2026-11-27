@@ -215,3 +215,47 @@ func (c capabilityCatalog) AgentModels(agent string) []modelcatalog.Model {
 func (c capabilityCatalog) ProviderModels(providerID string) ([]modelcatalog.Model, error) {
 	return append([]modelcatalog.Model(nil), c.providers[providerID]...), nil
 }
+
+// A provider that lists a model without describing its reasoning leaves the
+// effort to the agent's own session contract instead of failing the start.
+func TestModelCapabilitiesDefersUnknownReasoningToTheAgent(t *testing.T) {
+	catalog := capabilityCatalog{providers: map[string][]modelcatalog.Model{
+		provider.ProviderOpenAI: {{Value: "deepseek-v4.1-flash", Reasoning: modelcatalog.Reasoning{Status: modelcatalog.ReasoningUnknown}}},
+	}}
+	capabilities := ModelCapabilities{Catalog: catalog}
+	if err := capabilities.ValidateReasoningEffort(AgentOpenCode, provider.ProviderOpenAI, "deepseek-v4.1-flash", "xhigh"); err != nil {
+		t.Fatal(err)
+	}
+	if effort := capabilities.sessionReasoningEffort(AgentOpenCode, provider.ProviderOpenAI, "deepseek-v4.1-flash", "xhigh"); effort != "xhigh" {
+		t.Fatalf("unknown reasoning session effort = %q, want xhigh kept for the agent to judge", effort)
+	}
+}
+
+// A model the provider lists as advertising no reasoning still refuses an
+// effort, so a known non-reasoning model is not silently started on one.
+func TestModelCapabilitiesRefusesEffortOnModelsWithoutReasoning(t *testing.T) {
+	catalog := capabilityCatalog{providers: map[string][]modelcatalog.Model{
+		provider.ProviderOpenAI: {{Value: "plain", Reasoning: modelcatalog.Reasoning{Status: modelcatalog.ReasoningUnavailable}}},
+	}}
+	err := (ModelCapabilities{Catalog: catalog}).ValidateReasoningEffort(AgentOpenCode, provider.ProviderOpenAI, "plain", "xhigh")
+	if !errors.Is(err, ErrReasoningCapabilitiesUnavailable) {
+		t.Fatalf("err = %v, want ErrReasoningCapabilitiesUnavailable", err)
+	}
+}
+
+// Moving to a model with fewer thinking levels drops the saved effort for the
+// session, the way the picker does, instead of refusing to start.
+func TestModelCapabilitiesDropsAnEffortTheNewModelLacks(t *testing.T) {
+	capabilities := ModelCapabilities{Catalog: capabilityCatalog{providers: map[string][]modelcatalog.Model{
+		provider.ProviderOpenAI: {{Value: "model", Reasoning: modelcatalog.Reasoning{Status: modelcatalog.ReasoningReady, Efforts: []string{"low", "medium"}}}},
+	}}}
+	if err := capabilities.ValidateReasoningEffort(AgentOpenCode, provider.ProviderOpenAI, "model", "xhigh"); err == nil {
+		t.Fatal("expected the provider's advertised levels to reject xhigh")
+	}
+	if effort := capabilities.sessionReasoningEffort(AgentOpenCode, provider.ProviderOpenAI, "model", "xhigh"); effort != "" {
+		t.Fatalf("session effort = %q, want none for the model's own default", effort)
+	}
+	if effort := capabilities.sessionReasoningEffort(AgentClaude, provider.ProviderOpenAI, "model", "high"); effort != "high" {
+		t.Fatalf("claude effort = %q, want it validated rather than dropped", effort)
+	}
+}

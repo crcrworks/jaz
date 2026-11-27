@@ -75,6 +75,7 @@ type agentPolicy struct {
 	materializesOnPrompt    bool
 	unadvertisedModel       unadvertisedModelPolicy
 	effortOptions           []ReasoningEffortOption
+	effortsPerModel         bool // a level one model offers another does not, as OpenCode's
 	ultracodeSetting        bool
 	systemPromptAppendMeta  bool
 	promptSuggestions       bool
@@ -162,6 +163,7 @@ func agentPolicyForAgent(agentName string) agentPolicy {
 			modelConfigID:           sessionConfigModel,
 			effortConfigID:          claudeSessionConfigEffort,
 			modelConfiguredAtLaunch: true,
+			effortsPerModel:         true,
 			effortOptions:           openCodeReasoningEffortOptions,
 		}
 	case AgentAntigravity:
@@ -495,13 +497,17 @@ func (m *Manager) applyConfiguredReasoningEffort(
 	if effort == "" {
 		return nil, nil
 	}
-	if !agentPolicyForAgent(agentName).usesReasoningEffortConfigOption() && options.effortConfigID == "" {
+	policy := agentPolicyForAgent(agentName)
+	if !policy.usesReasoningEffortConfigOption() && options.effortConfigID == "" {
 		return nil, fmt.Errorf("acp agent %q model %q did not advertise reasoning controls", agentName, model)
 	}
 	if activeModelOptions && !options.effortConfigPresent {
 		return nil, nil
 	}
 	if options.effortConfigPresent && !configOptionValueAvailable(options.effortOptions, effort) {
+		if policy.effortsPerModel {
+			return nil, nil
+		}
 		return nil, fmt.Errorf(
 			"set acp agent %q reasoning effort %q for model %q: the active model did not advertise that reasoning effort; advertised values: %s",
 			agentName,

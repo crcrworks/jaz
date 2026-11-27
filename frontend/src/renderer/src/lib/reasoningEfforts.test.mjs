@@ -35,7 +35,24 @@ describe('modelReasoningSelection', () => {
     expect(selection.blocked).toBeTrue()
   })
 
-  test('carries the configured effort when the provider knows no levels', () => {
+  test('carries the configured effort while the provider has not described the model', () => {
+    const selection = modelReasoningSelection({
+      ...input,
+      catalog: {
+        status: 'ready',
+        suggestions: [{ value: 'gpt-test', label: 'Test', reasoning: { status: 'unknown' } }],
+      },
+    })
+
+    // Listing a model says nothing about its thinking, which is not the same as
+    // knowing it has none: the effort is carried for the agent to judge.
+    expect(selection.effectiveEffort).toBe('high')
+    expect(selection.supported).toBeTrue()
+    expect(selection.status).toBe('ready')
+    expect(selection.blocked).toBeFalse()
+  })
+
+  test('runs a model the provider knows has no reasoning without an effort', () => {
     const selection = modelReasoningSelection({
       ...input,
       catalog: {
@@ -44,11 +61,8 @@ describe('modelReasoningSelection', () => {
       },
     })
 
-    // The provider knows nothing about this model's thinking, which is not the
-    // same as knowing it has none: the effort is carried for the agent to judge.
-    expect(selection.effectiveEffort).toBe('high')
-    expect(selection.supported).toBeTrue()
-    expect(selection.status).toBe('ready')
+    expect(selection.options).toEqual([])
+    expect(selection.effectiveEffort).toBe('')
     expect(selection.blocked).toBeFalse()
   })
 

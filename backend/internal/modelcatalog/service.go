@@ -94,7 +94,7 @@ func (s *Service) ProviderModels(id string) ([]Model, error) {
 			}
 		}
 		if model := strings.TrimSpace(meta.DefaultModel); model != "" {
-			return []Model{completeModelMetadata(modelWithoutProviderReasoning(model, model, ""))}, nil
+			return []Model{completeModelMetadata(modelWithUnknownReasoning(model, model, ""))}, nil
 		}
 		return []Model{}, nil
 	}
@@ -120,7 +120,9 @@ func (s *Service) enrichReasoning(models []Model) []Model {
 		}
 		source, ok := byID[models[i].OpenRouterID]
 		if !ok {
-			models[i].Reasoning.Status = ReasoningUnavailable
+			// The provider Jaz looks to for this model's reasoning does not list
+			// it, which says nothing about whether the model can reason.
+			models[i].Reasoning.Status = ReasoningUnknown
 			continue
 		}
 		models[i].Reasoning = source.Reasoning

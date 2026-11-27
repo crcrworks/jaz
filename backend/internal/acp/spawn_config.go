@@ -94,7 +94,13 @@ func (m *Manager) spawnConfig(req SpawnRequest) (SpawnRequest, AgentConfig, stri
 		return SpawnRequest{}, AgentConfig{}, "", err
 	}
 	if m.cfg.ModelCatalog != nil {
-		if err := (ModelCapabilities{Catalog: m.cfg.ModelCatalog}).ValidateReasoningEffort(req.ACPAgent, cfg.ModelProvider, cfg.Model, effort); err != nil {
+		capabilities := ModelCapabilities{Catalog: m.cfg.ModelCatalog}
+		if sessionEffort := capabilities.sessionReasoningEffort(req.ACPAgent, cfg.ModelProvider, cfg.Model, effort); sessionEffort != effort {
+			m.log.Warn("acp model does not offer the configured reasoning effort",
+				"agent", req.ACPAgent, "model", cfg.Model, "effort", effort)
+			effort = sessionEffort
+		}
+		if err := capabilities.ValidateReasoningEffort(req.ACPAgent, cfg.ModelProvider, cfg.Model, effort); err != nil {
 			return SpawnRequest{}, AgentConfig{}, "", err
 		}
 	}

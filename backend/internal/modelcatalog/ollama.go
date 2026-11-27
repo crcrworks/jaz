@@ -46,6 +46,9 @@ func fetchOllamaModels(ctx context.Context, baseURL string) ([]Model, error) {
 					return
 				}
 			}
+			// /api/show answered for the model, so a missing thinking capability
+			// is that model having none.
+			models[i].Reasoning.Status = ReasoningUnavailable
 		})
 	}
 	probes.Wait()

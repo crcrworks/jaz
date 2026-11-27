@@ -2,8 +2,11 @@ package acp
 
 import (
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/log"
 )
 
 // Shape returned by claude-agent-acp@0.44.0 for session/set_config_option
@@ -215,5 +218,23 @@ func TestUnadvertisedModelPolicyPerAgent(t *testing.T) {
 	// Agents with no policy leave the id to the agent to accept or refuse.
 	if model, err := agentPolicyForAgent(AgentKimi).sessionModelToSend(AgentKimi, "kimi-k3", state, true); err != nil || model != "kimi-k3" {
 		t.Fatalf("unpoliced model = %q, err %v", model, err)
+	}
+}
+
+// OpenCode keeps a thinking level per model, so a level the configured model
+// does not offer is dropped for that session rather than failing the start.
+func TestOpenCodeDropsAnEffortTheModelDoesNotOffer(t *testing.T) {
+	options := sessionConfigOptionsState{
+		configOptionsPresent: true,
+		effortConfigPresent:  true,
+		effortConfigID:       "effort",
+		effortOptions:        []string{"low", "high"},
+	}
+	manager := &Manager{log: log.New(io.Discard)}
+	if raw, err := manager.applyConfiguredReasoningEffort(t.Context(), nil, AgentOpenCode, "session", "model", "xhigh", options, false); err != nil || raw != nil {
+		t.Fatalf("opencode unsupported effort = %v, %v", raw, err)
+	}
+	if _, err := manager.applyConfiguredReasoningEffort(t.Context(), nil, AgentClaude, "session", "model", "xhigh", options, false); err == nil {
+		t.Fatal("claude must still refuse an effort its model does not advertise")
 	}
 }
