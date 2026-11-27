@@ -20,14 +20,15 @@ type httpMCPServer struct {
 	Headers []mcpconfig.Header `json:"headers"`
 }
 
-func (m *Manager) mcpServersForAgent(ctx context.Context, initRaw json.RawMessage, policy string) []json.RawMessage {
+func (m *Manager) mcpServersForAgent(ctx context.Context, agent string, initRaw json.RawMessage, policy string) []json.RawMessage {
 	var init struct {
 		AgentCapabilities acpschema.AgentCapabilities `json:"agentCapabilities"`
 	}
 	if err := json.Unmarshal(initRaw, &init); err != nil {
 		return []json.RawMessage{}
 	}
-	if init.AgentCapabilities.MCPCapabilities == nil || !init.AgentCapabilities.MCPCapabilities.HTTP {
+	http := init.AgentCapabilities.MCPCapabilities != nil && init.AgentCapabilities.MCPCapabilities.HTTP
+	if !http && !agentPolicyForAgent(agent).mcpServersFromSession {
 		return []json.RawMessage{}
 	}
 	servers, err := enabledHTTPMCPServers(ctx, m.cfg.MCPStore, policy)

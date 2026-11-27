@@ -14,6 +14,7 @@ import (
 	"github.com/gluonfield/acp-transport/jsonrpc"
 	"github.com/wins/jaz/backend/internal/mcpsession"
 	"github.com/wins/jaz/backend/internal/promptmodule"
+	"github.com/wins/jaz/backend/internal/pirpc"
 	"github.com/wins/jaz/backend/internal/provider"
 	"github.com/wins/jaz/backend/internal/runtimefiles"
 	"github.com/wins/jaz/backend/internal/sessioncontext"
@@ -343,6 +344,11 @@ func (m *Manager) connectWithHandler(ctx context.Context, name string, cfg Agent
 			return nil, err
 		}
 	}
+	// Jaz opens a pi bridge before it knows the thread's id; the prompt and
+	// directory it renders then are this launch's.
+	if CanonicalAgentName(name) == AgentPi {
+		ctx = pirpc.WithLaunchContext(ctx, launchPrompt, cwd)
+	}
 	runCtx, cancel := context.WithCancel(context.Background())
 	conn, stderr, err := m.openConn(runCtx, name, cfg, env, cwd, launchPrompt)
 	if err != nil {
@@ -508,7 +514,7 @@ func (m *Manager) newACPSession(ctx context.Context, ac *agentConn, agent string
 	return m.newACPProtocolSession(ctx, ac, "agent", newSessionRequest{
 		Meta:       meta,
 		Cwd:        cwd,
-		MCPServers: m.mcpServersForAgent(ctx, ac.initRaw, session.RuntimeRef.MCPServerPolicy),
+		MCPServers: m.mcpServersForAgent(ctx, agent, ac.initRaw, session.RuntimeRef.MCPServerPolicy),
 	})
 }
 

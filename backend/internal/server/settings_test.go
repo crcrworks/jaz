@@ -234,7 +234,7 @@ func TestAgentSettingsAPIControlsEnabledACPAgents(t *testing.T) {
 	if err := json.Unmarshal(getRes.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(got.Agents, ",") != "codex,claude,kimi,grok,opencode,antigravity,muse,copilot,microsoft_copilot" {
+	if strings.Join(got.Agents, ",") != "codex,claude,kimi,grok,opencode,antigravity,muse,copilot,microsoft_copilot,pi" {
 		t.Fatalf("unexpected seeded settings %#v", got)
 	}
 	if !hasModelProvider(got.Providers, "openai", "https://api.openai.com/v1") ||
@@ -849,7 +849,7 @@ func TestAgentSettingsAPIRoundTripsConfiguredACPAgent(t *testing.T) {
 	if err := json.Unmarshal(getRes.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(got.Agents, ",") != "codex,claude,kimi,grok,opencode,antigravity,muse,copilot,microsoft_copilot,local_helper" {
+	if strings.Join(got.Agents, ",") != "codex,claude,kimi,grok,opencode,antigravity,muse,copilot,microsoft_copilot,pi,local_helper" {
 		t.Fatalf("agents = %#v", got.Agents)
 	}
 	if _, ok := got.ACP[acp.AgentJaz]; ok {

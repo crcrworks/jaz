@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/wins/jaz/backend/internal/m365copilot"
+	"github.com/wins/jaz/backend/internal/pirpc"
 	mcpconfig "github.com/wins/jaz/backend/internal/mcpconfig"
 	"github.com/wins/jaz/backend/internal/modelcatalog"
 	"github.com/wins/jaz/backend/internal/plugins"
@@ -25,6 +26,8 @@ const (
 	AgentMuse             = "muse"
 	AgentCopilot          = "copilot"
 	AgentMicrosoftCopilot = m365copilot.AgentName
+	// AgentPi runs pi's own RPC mode through an in-process ACP bridge.
+	AgentPi = pirpc.AgentName
 
 	AgentProviderModeNone          = ""
 	AgentProviderModeAgentDefaults = "agent_defaults"
@@ -44,7 +47,7 @@ func CanonicalAgentName(name string) string {
 
 func AgentSupportsCompact(name string) bool {
 	switch CanonicalAgentName(name) {
-	case AgentCodex, AgentClaude:
+	case AgentCodex, AgentClaude, AgentPi:
 		return true
 	default:
 		return false
@@ -315,6 +318,7 @@ var builtinAgentOrder = []string{
 	AgentMuse,
 	AgentCopilot,
 	AgentMicrosoftCopilot,
+	AgentPi,
 }
 
 func BuiltinAgents() AgentCatalog {
@@ -361,6 +365,9 @@ func BuiltinAgents() AgentCatalog {
 			ManagedAdapterArgs: []string{"--acp", "--stdio"},
 		},
 		AgentMicrosoftCopilot: {
+			BuiltinBridge: true,
+		},
+		AgentPi: {
 			BuiltinBridge: true,
 		},
 	}

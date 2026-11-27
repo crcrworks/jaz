@@ -72,7 +72,7 @@ func agentAuthStatus(name string, cfg AgentConfig, root string, env map[string]s
 		status = agentLoginCommand(name, root, resolved.Config, loginBinDirs(cfg), env)
 		status.RefreshOwner = RefreshOwnerAgentCLI
 	}
-	status.ManualDisconnect = agentManualDisconnect(name, cfg)
+	status.ManualDisconnect = agentManualDisconnect(name, cfg, root)
 	status.StoragePath = resolved.StoragePath
 	status.Authenticated = resolved.Authenticated
 	status.Reason = resolved.Reason
@@ -128,6 +128,8 @@ func AgentLoginInvocationFor(name, root string, auth AgentAuthConfig, binDir str
 	case AgentMuse:
 		probeEnv := NewManager(nil, Config{Root: root, Env: env}, nil).probeEnv(name, AgentConfig{LoginBinDir: binDir})
 		return museLoginInvocation(probeEnv)
+	case AgentPi:
+		return piLoginInvocation(root)
 	case AgentAntigravity:
 		executable, err := antigravityExecutable(binDir)
 		if err != nil {

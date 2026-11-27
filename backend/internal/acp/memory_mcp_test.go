@@ -23,7 +23,7 @@ func TestMCPServersForAgentUsesConfiguredStore(t *testing.T) {
 		}},
 	}}}}}
 	capable := json.RawMessage(`{"agentCapabilities":{"mcpCapabilities":{"http":true}}}`)
-	servers := m.mcpServersForAgent(context.Background(), capable, MCPServerPolicyAll)
+	servers := m.mcpServersForAgent(context.Background(), AgentClaude, capable, MCPServerPolicyAll)
 	if len(servers) != 1 {
 		t.Fatalf("expected configured jaz entry, got %v", servers)
 	}
@@ -42,7 +42,7 @@ func TestMCPServersForAgentUsesConfiguredStore(t *testing.T) {
 	if got := headerValue(entry.Headers, mcpsession.HeaderName); got != "" {
 		t.Fatalf("unexpected session header without context: %q", got)
 	}
-	servers = m.mcpServersForAgent(mcpsession.With(context.Background(), "thread-1"), capable, MCPServerPolicyAll)
+	servers = m.mcpServersForAgent(mcpsession.With(context.Background(), "thread-1"), AgentClaude, capable, MCPServerPolicyAll)
 	if len(servers) != 1 {
 		t.Fatalf("expected configured jaz entry with session context, got %v", servers)
 	}
@@ -54,7 +54,7 @@ func TestMCPServersForAgentUsesConfiguredStore(t *testing.T) {
 	}
 
 	incapable := json.RawMessage(`{"agentCapabilities":{}}`)
-	if servers := m.mcpServersForAgent(context.Background(), incapable, MCPServerPolicyAll); len(servers) != 0 {
+	if servers := m.mcpServersForAgent(context.Background(), AgentClaude, incapable, MCPServerPolicyAll); len(servers) != 0 {
 		t.Fatalf("non-http-capable agent must get nothing, got %v", servers)
 	}
 }
@@ -83,7 +83,7 @@ func TestMCPServersForJaztoolsOnlyPolicyOnlyExposesJaztools(t *testing.T) {
 		}}},
 	}
 	capable := json.RawMessage(`{"agentCapabilities":{"mcpCapabilities":{"http":true}}}`)
-	servers := m.mcpServersForAgent(mcpsession.With(context.Background(), "search-session"), capable, MCPServerPolicyMemorySearchWorker)
+	servers := m.mcpServersForAgent(mcpsession.With(context.Background(), "search-session"), AgentClaude, capable, MCPServerPolicyMemorySearchWorker)
 	if len(servers) != 1 {
 		t.Fatalf("servers = %d, want only jaztools", len(servers))
 	}

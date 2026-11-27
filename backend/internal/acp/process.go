@@ -19,7 +19,9 @@ import (
 	"github.com/gluonfield/acp-transport/stdio"
 	"github.com/gluonfield/acp-transport/streamhttp"
 	"github.com/wins/jaz/backend/internal/m365copilot"
+	"github.com/wins/jaz/backend/internal/pirpc"
 	"github.com/wins/jaz/backend/internal/processenv"
+	"github.com/wins/jaz/backend/internal/runtimefiles"
 	"github.com/wins/jaz/backend/internal/subprocess"
 )
 
@@ -205,6 +207,8 @@ func (m *Manager) openBuiltinBridge(ctx context.Context, name string, cfg AgentC
 			return nil, nil, fmt.Errorf("acp agent %q OAuth service is not configured", name)
 		}
 		return m365copilot.OpenACPConn(ctx, auth), nil, nil
+	case AgentPi:
+		return pirpc.OpenACPConn(ctx, m.piBridgeConfig(cfg)), nil, nil
 	default:
 		return nil, nil, fmt.Errorf("acp agent %q has no built-in ACP bridge", name)
 	}
@@ -447,6 +451,18 @@ func (m *Manager) buildProcessEnv(name string, agent AgentConfig, prepare bool) 
 		// which would carry Jaz's pinned copy past its pin.
 		if agent.ManagedAdapter != "" {
 			env["AGY_CLI_DISABLE_AUTO_UPDATE"] = "true"
+		}
+	}
+	if name == AgentPi {
+		processenv.PreserveHost(env, "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "LANG", "LC_ALL", "LC_CTYPE", "TERM")
+		// pi keeps its credentials in its own agent directory, so Jaz points it
+		// at its own copy instead of the user's ~/.pi.
+		env["PI_CODING_AGENT_DIR"] = runtimefiles.New(root).ACPPiHome
+		env["PI_SKIP_VERSION_CHECK"] = "1"
+		if prepare {
+			if err := os.MkdirAll(env["PI_CODING_AGENT_DIR"], 0o700); err != nil {
+				prepareErr = firstError(prepareErr, fmt.Errorf("prepare pi profile %s: %w", env["PI_CODING_AGENT_DIR"], err))
+			}
 		}
 	}
 	if prepare {
