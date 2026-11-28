@@ -62,6 +62,7 @@ function emptyProviderDraft(): ProviderDraft {
     base_url: '',
     capabilities: ['chat_completions'],
     default_model: '',
+    reasoning_models: [],
     icon: '',
     api_key: '',
   }
@@ -74,6 +75,7 @@ function draftFromProvider(provider: ProviderOption): ProviderDraft {
     base_url: provider.base_url,
     capabilities: provider.capabilities?.length ? [...provider.capabilities] : ['chat_completions'],
     default_model: provider.default_model ?? '',
+    reasoning_models: provider.reasoning_models?.length ? [...provider.reasoning_models] : [],
     icon: provider.icon ?? '',
     api_key: '',
   }
@@ -542,6 +544,22 @@ function ProviderEditorModal({
               spellCheck={false}
               className="font-mono text-[12px]"
               aria-label="Extra headers JSON"
+            />
+          </ProviderField>
+          <ProviderField
+            label="Thinking models"
+            hint="Model ids this endpoint does not describe but that do reason, one per line. A model with thinking offers its levels; one without it does not."
+          >
+            <textarea
+              className="min-h-16 w-full resize-y rounded-control bg-bg px-2.5 py-1.5 font-mono text-[12px] text-ink outline-none ring-1 ring-border focus-visible:ring-2 focus-visible:ring-primary"
+              value={(draft.reasoning_models ?? []).join('\n')}
+              onChange={(event) => onChange({
+                ...draft,
+                reasoning_models: event.target.value.split('\n').map((id) => id.trim()).filter(Boolean),
+              })}
+              rows={2}
+              spellCheck={false}
+              aria-label="Thinking models"
             />
           </ProviderField>
           <ProviderField label="Icon">

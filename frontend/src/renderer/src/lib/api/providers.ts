@@ -9,15 +9,20 @@ import type {
 // Trims text fields and drops a blank api_key so an edit that doesn't touch the
 // key leaves it unchanged. The endpoint URL keeps its path (unlike MCP's
 // origin-collapsing normalize) — providers legitimately have paths like /openai/v1.
+//
+// Every other field is carried through as it is: this is the wire shape of the
+// provider, so naming fields here would silently drop each new one.
 function normalizeProviderInput(input: ProviderInput): ProviderInput {
   const apiKey = input.api_key?.trim()
+  const icon = input.icon?.trim()
   return {
+    ...input,
     label: input.label.trim(),
     base_url: input.base_url.trim().replace(/\/+$/, ''),
     capabilities: input.capabilities.length ? [...input.capabilities] : ['chat_completions'],
     default_model: input.default_model?.trim() || undefined,
-    icon: input.icon?.trim() || undefined,
-    ...(apiKey ? { api_key: apiKey } : {}),
+    icon: icon || undefined,
+    ...(apiKey ? { api_key: apiKey } : { api_key: undefined }),
   }
 }
 

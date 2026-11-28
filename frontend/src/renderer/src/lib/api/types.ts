@@ -1219,6 +1219,8 @@ export interface ModelProviderOption {
   custom?: boolean
   /** icon slug (brand mark) for the provider; falls back to a generic mark */
   icon?: string
+  /** model ids the endpoint does not describe as thinking that a person declared */
+  reasoning_models?: string[]
 }
 
 export interface ModelProviderStatus {
@@ -1261,6 +1263,8 @@ export interface ProviderInput {
   default_model?: string
   /** extra HTTP headers sent with every request to this provider */
   headers?: Record<string, string>
+  /** model ids this endpoint does not describe as thinking but that do think */
+  reasoning_models?: string[]
   icon?: string
   /** write-only secret; omit on edit to leave an existing key unchanged */
   api_key?: string

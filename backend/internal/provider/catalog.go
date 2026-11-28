@@ -53,6 +53,9 @@ type ModelProviderConfig struct {
 	// Headers are sent with every request to this provider. Some inferences
 	// (e.g. OpenCode Go) require a custom header to route requests.
 	Headers map[string]string
+	// Reasoning names the models whose endpoint does not say whether they think
+	// but a person declared that they do, by the provider's own model id.
+	Reasoning []string
 }
 
 func ModelProviders() []ModelProvider {

@@ -44,7 +44,8 @@ and the picker has no level to offer. Jaz does not fill the field in: whether
 provider's `/models` list says, and a level invented here would be exactly the
 guess this decision refuses. A model pi describes itself — or one a person
 declared with `reasoning` and `thinkingLevelMap` in that profile's
-`models.json` — keeps the levels pi reports for it.
+`models.json` — keeps the levels pi reports for it; decision 0011 keeps that
+declaration intact when Jaz redeclares the provider.
 
 ## A level a picker offers is a level a routine stores
 

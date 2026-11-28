@@ -32,7 +32,9 @@ var reservedIDs = map[string]struct{}{
 }
 
 // CustomProvider is a user-defined OpenAI-compatible model provider. The API key
-// lives in the runtime .env (keyed by APIKeyEnv), never in this record.
+// lives in the runtime .env (keyed by APIKeyEnv), never in this record. A model
+// whose endpoint does not say whether it thinks is declared in Reasoning, which
+// is what pi reads to offer that model's thinking levels.
 type CustomProvider struct {
 	ID           string            `json:"id"`
 	Label        string            `json:"label"`
@@ -41,6 +43,7 @@ type CustomProvider struct {
 	DefaultModel string            `json:"default_model,omitempty"`
 	Capabilities []string          `json:"capabilities"`
 	Headers      map[string]string `json:"headers,omitempty"`
+	Reasoning    []string          `json:"reasoning_models,omitempty"`
 	Icon         string            `json:"icon,omitempty"`
 	CreatedAt    time.Time         `json:"created_at"`
 	UpdatedAt    time.Time         `json:"updated_at"`
@@ -61,6 +64,7 @@ func (p CustomProvider) Config() provider.ModelProviderConfig {
 		DefaultModel: p.DefaultModel,
 		Capabilities: append([]string(nil), p.Capabilities...),
 		Headers:      p.Headers,
+		Reasoning:    append([]string(nil), p.Reasoning...),
 	}
 }
 
@@ -78,6 +82,7 @@ type Input struct {
 	DefaultModel string            `json:"default_model"`
 	Capabilities []string          `json:"capabilities"`
 	Headers      map[string]string `json:"headers,omitempty"`
+	Reasoning    []string          `json:"reasoning_models,omitempty"`
 	Icon         string            `json:"icon"`
 }
 
@@ -125,6 +130,7 @@ func Create(store storage.SettingsStorage, in Input) (CustomProvider, error) {
 		DefaultModel: in.DefaultModel,
 		Capabilities: append([]string(nil), in.Capabilities...),
 		Headers:      in.Headers,
+		Reasoning:    append([]string(nil), in.Reasoning...),
 		Icon:         in.Icon,
 		CreatedAt:    now,
 		UpdatedAt:    now,
@@ -155,6 +161,7 @@ func Update(store storage.SettingsStorage, id string, in Input) (CustomProvider,
 		list.Providers[i].DefaultModel = in.DefaultModel
 		list.Providers[i].Capabilities = append([]string(nil), in.Capabilities...)
 		list.Providers[i].Headers = in.Headers
+		list.Providers[i].Reasoning = append([]string(nil), in.Reasoning...)
 		list.Providers[i].Icon = in.Icon
 		list.Providers[i].UpdatedAt = time.Now().UTC()
 		updated := list.Providers[i]
@@ -197,6 +204,7 @@ func ValidateInput(in Input) (Input, error) {
 		}
 	}
 	in.Capabilities = normalizedCapabilities(in.Capabilities)
+	in.Reasoning = normalizedReasoningModels(in.Reasoning)
 	if in.Label == "" {
 		return in, errors.New("name is required")
 	}
@@ -219,6 +227,26 @@ func ValidateInput(in Input) (Input, error) {
 	}
 	in.BaseURL = strings.TrimRight(parsed.String(), "/")
 	return in, nil
+}
+
+// normalizedReasoningModels keeps the model ids a person declared as thinking as
+// they wrote them. A provider's ids may contain a slash themselves, so nothing
+// is cut from them.
+func normalizedReasoningModels(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func normalizedCapabilities(values []string) []string {
