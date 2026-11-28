@@ -102,63 +102,121 @@ func TestPreparePiProfileSuppliesModelProviders(t *testing.T) {
 	}
 }
 
-// TestPreparePiProfileKeepsDeclaredModelMetadata pins that a model entry the
-// profile already declares keeps its thinking metadata. pi reads a missing
-// reasoning as a model that cannot think, so declaring the provider again with
-// the model list Jaz builds must not drop the levels the profile states for it
-// — a pi thread showed "no thinking levels" for a model pi runs at six because
-// Jaz replaced a declared entry with an entry carrying no reasoning.
+// TestPreparePiProfileKeepsDeclaredModelMetadata pins that a model a person
+// declared as thinking reaches Jaz's isolated profile that way. pi reads an
+// entry without reasoning as a model that cannot think, so a model pi runs at
+// many levels was offered none: Jaz declared it itself, in a bare form.
 func TestPreparePiProfileKeepsDeclaredModelMetadata(t *testing.T) {
+	clearProviderEnv(t)
+	root := t.TempDir()
+	const key = "provider-secret-key"
+	server := piProviderServer(t, key)
+	providers := map[string]provider.ModelProviderConfig{
+		"commandcode": {
+			Type: "openai-compatible", BaseURL: server.URL + "/v1", APIKey: key,
+			DefaultModel: "deepseek/deepseek-v4.1-flash",
+			Reasoning:    []string{"deepseek/deepseek-v4.1-flash"},
+		},
+	}
+	if _, err := acp.PreparePiProfile(root, map[string]string{}, providers, "commandcode/deepseek/deepseek-v4.1-flash"); err != nil {
+		t.Fatal(err)
+	}
+	for _, model := range piModels2026(t, root)["commandcode"] {
+		if model["id"] != "deepseek/deepseek-v4.1-flash" {
+			continue
+		}
+		if model["reasoning"] != true {
+			t.Fatalf("declared reasoning lost: %+v", model)
+		}
+		return
+	}
+	t.Fatalf("model not declared")
+}
+
+// TestPreparePiProfileRefreshesItsOwnModels pins that the two kinds of entry
+// stay apart. A model Jaz added is rewritten with what the provider says now,
+// so a rename takes effect and a retired model leaves, while a model a person
+// declared keeps the fields they named.
+func TestPreparePiProfileRefreshesItsOwnModels(t *testing.T) {
+	clearProviderEnv(t)
+	root := t.TempDir()
+	// A provider's list is cached per endpoint, so each refresh is served by
+	// its own endpoint: the second answer is what a later refresh must see.
+	listing := func(models []map[string]any) *httptest.Server {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/v1/models" {
+				http.NotFound(w, r)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": models})
+		}))
+		t.Cleanup(server.Close)
+		return server
+	}
+	first := listing([]map[string]any{
+		{"id": "flash", "name": "Flash", "context_length": 1000000},
+		{"id": "retired", "name": "Retired", "context_length": 1000000},
+	})
+	second := listing([]map[string]any{{"id": "flash", "name": "Flash 2", "context_length": 2000000}})
+	for _, base := range []string{first.URL + "/v1", second.URL + "/v1"} {
+		providers := map[string]provider.ModelProviderConfig{
+			"commandcode": {Type: "openai-compatible", BaseURL: base, APIKey: "k"},
+		}
+		if _, err := acp.PreparePiProfile(root, map[string]string{}, providers, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	models := piModels2026(t, root)["commandcode"]
+	if len(models) != 1 || models[0]["id"] != "flash" || models[0]["name"] != "Flash 2" || models[0]["contextWindow"] != float64(2000000) {
+		t.Fatalf("provider response not reflected: %+v", models)
+	}
+}
+
+// TestPreparePiProfileTakesAModelsFileWithoutProviders pins that a models.json
+// which names no providers is read as none. The file is Jaz's own declaration
+// point, so a blank or null one must not stop a thread from starting.
+func TestPreparePiProfileTakesAModelsFileWithoutProviders(t *testing.T) {
 	clearProviderEnv(t)
 	root := t.TempDir()
 	home := filepath.Join(root, "acp", "pi")
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	declared := `{"providers":{"commandcode":{"models":[{"id":"deepseek/deepseek-v4.1-flash",` +
-		`"reasoning":true,"thinkingLevelMap":{"off":"none","low":"low","max":"max"}}]}}}`
-	if err := os.WriteFile(filepath.Join(home, "models.json"), []byte(declared), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(home, "models.json"), []byte(`{"providers":null}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	const key = "provider-secret-key"
-	server := piProviderServer(t, key)
-	t.Cleanup(server.Close)
+	server := piProviderServer(t, "")
 	providers := map[string]provider.ModelProviderConfig{
-		"commandcode": {Type: "openai-compatible", BaseURL: server.URL + "/v1", APIKey: key, DefaultModel: "deepseek/deepseek-v4.1-flash"},
+		"commandcode": {Type: "openai-compatible", BaseURL: server.URL + "/v1", DefaultModel: "gpt-6-luna"},
 	}
-	if _, err := acp.PreparePiProfile(root, map[string]string{}, providers, "commandcode/deepseek/deepseek-v4.1-flash"); err != nil {
+	if _, err := acp.PreparePiProfile(root, map[string]string{}, providers, ""); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(filepath.Join(home, "models.json"))
+	if got := piModels2026(t, root)["commandcode"]; len(got) == 0 {
+		t.Fatalf("provider not declared over an empty file")
+	}
+}
+
+// piModels2026 reads the models.json Jaz wrote, per provider.
+func piModels2026(t *testing.T, root string) map[string][]map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, "acp", "pi", "models.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var file struct {
 		Providers map[string]struct {
-			Models []struct {
-				ID               string         `json:"id"`
-				Reasoning        *bool          `json:"reasoning"`
-				ThinkingLevelMap map[string]any `json:"thinkingLevelMap"`
-			} `json:"models"`
+			Models []map[string]any `json:"models"`
 		} `json:"providers"`
 	}
 	if err := json.Unmarshal(data, &file); err != nil {
-		t.Fatal(err)
+		t.Fatalf("models.json: %v: %s", err, data)
 	}
-	models := file.Providers["commandcode"].Models
-	if len(models) < 2 {
-		t.Fatalf("models not declared by Jaz: %s", data)
+	out := make(map[string][]map[string]any, len(file.Providers))
+	for id, provider := range file.Providers {
+		out[id] = provider.Models
 	}
-	for _, model := range models {
-		if model.ID != "deepseek/deepseek-v4.1-flash" {
-			continue
-		}
-		if model.Reasoning == nil || !*model.Reasoning || model.ThinkingLevelMap["max"] != "max" {
-			t.Fatalf("declared metadata lost: %+v", model)
-		}
-		return
-	}
-	t.Fatalf("model not declared: %s", data)
+	return out
 }
 
 // TestPreparePiProfileDeclaresProviderWithoutKey pins that a provider Jaz has

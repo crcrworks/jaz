@@ -23,8 +23,13 @@ const (
 	piModelListTTL = 10 * time.Minute
 )
 
+// piModelsFile is what Jaz keeps in <profile>/models.json. Models names, per
+// provider, the models Jaz added: the ones it must keep current from the
+// provider's own list. Everything else in the file is a person's declaration,
+// which Jaz reads and never rewrites.
 type piModelsFile struct {
 	Providers map[string]piProviderConfig `json:"providers"`
+	JazModels map[string][]string         `json:"jazModels,omitempty"`
 }
 
 type piProviderConfig struct {
@@ -33,9 +38,9 @@ type piProviderConfig struct {
 	API     string            `json:"api,omitempty"`
 	APIKey  string            `json:"apiKey,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
-	// Models are pi's own model entries. An entry the profile already declares
-	// is carried over verbatim, so nothing written there is lost.
-	Models []any `json:"models,omitempty"`
+	// Models are pi's own model entries. An entry the profile declares, or one
+	// a person declared in their own pi profile, is carried over as it is.
+	Models []map[string]any `json:"models,omitempty"`
 }
 
 // piModel is the model entry Jaz adds itself: what pi shows for a model it is
@@ -44,6 +49,20 @@ type piModel struct {
 	ID            string `json:"id"`
 	Name          string `json:"name,omitempty"`
 	ContextWindow int    `json:"contextWindow,omitempty"`
+}
+
+// piDeclaredThinking reports whether a person declared that this model thinks.
+// The provider's own /models list does not say, and a level invented from a
+// model name would be a guess, so the declaration travels on the provider.
+func piDeclaredThinking(cfg modelprovider.ModelProviderConfig, modelID string) bool {
+	for _, id := range cfg.Reasoning {
+		// A provider's id stands alone here; pi-namespaced, it may carry the
+		// provider in front.
+		if id == modelID || strings.HasSuffix(id, "/"+modelID) {
+			return true
+		}
+	}
+	return false
 }
 
 // PreparePiProfile points Jaz's isolated pi profile at Jaz's Model Providers:
@@ -66,7 +85,14 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 	if readErr == nil {
 		_ = json.Unmarshal(current, &file)
 	}
-	declared := piModelsFile{Providers: map[string]piProviderConfig{}}
+	// A models.json that names no providers (or a null one) leaves the map nil.
+	if file.Providers == nil {
+		file.Providers = map[string]piProviderConfig{}
+	}
+	if file.JazModels == nil {
+		file.JazModels = map[string][]string{}
+	}
+	declared := piModelsFile{Providers: map[string]piProviderConfig{}, JazModels: map[string][]string{}}
 	supplied := []string{}
 	for _, resolved := range modelprovider.ResolveModelProviders(providers) {
 		keyEnv := modelprovider.ConfiguredAPIKeyEnv(resolved.ID, resolved.Config)
@@ -106,17 +132,24 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 			// not authenticate ignores the dummy value pi documents.
 			apiKey = "none"
 		}
+		known := file.Providers[resolved.ID]
+		entries := make([]map[string]any, 0, len(known.Models))
+		for _, entry := range known.Models {
+			entries = append(entries, entry)
+		}
 		declared.Providers[resolved.ID] = piProviderConfig{
 			Name:    firstNonEmpty(resolved.Config.Label, resolved.Meta.Label),
 			BaseURL: baseURL,
 			API:     piProviderAPI,
 			APIKey:  apiKey,
 			Headers: resolved.Config.Headers,
-			Models:  withDeclaredModels(file.Providers[resolved.ID].Models, models),
+			Models:  piProviderEntries(entries, file.JazModels[resolved.ID], resolved.Config, models),
 		}
+		declared.JazModels[resolved.ID] = piModelIDs(models)
 	}
 	for id, provider := range declared.Providers {
 		file.Providers[id] = provider
+		file.JazModels[id] = declared.JazModels[id]
 	}
 	if len(declared.Providers) > 0 {
 		data, err := json.MarshalIndent(file, "", "  ")
@@ -133,52 +166,80 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 	return supplied, nil
 }
 
-// withDeclaredModels keeps what the profile already says about a model Jaz is
-// declaring, verbatim, and keeps a model only the profile lists: pi reads an
-// entry without reasoning as a model that cannot think, so replacing one with
-// the id and context window Jaz knows turned a model pi runs at six levels into
-// one it runs at none. Jaz adds models; it never removes one.
-func withDeclaredModels(kept []any, declared []any) []any {
-	byID := make(map[string]any, len(kept))
-	for _, entry := range kept {
-		if id := piModelID(entry); id != "" {
-			byID[id] = entry
-		}
+// piProviderEntries is a provider's model list after this refresh. Jaz keeps
+// current the entries it added itself and drops the models the provider
+// retired, so its own list never goes stale. Every other entry is carried over
+// as it is: pi reads an entry without reasoning as a model that cannot think,
+// so replacing one would drop what it was told about that model.
+//
+// A provider's /models list says ids, names and context lengths, never whether
+// a model thinks. A model a person declared as thinking carries that, and only
+// that: pi fills in its own levels, which Jaz never states.
+func piProviderEntries(known []map[string]any, jazIDs []string, cfg modelprovider.ModelProviderConfig, models []piModel) []map[string]any {
+	byID := make(map[string]map[string]any, len(known))
+	for _, entry := range known {
+		byID[piModelID(entry)] = entry
 	}
-	out := make([]any, 0, len(kept)+len(declared))
-	listed := make(map[string]struct{}, len(declared))
-	for _, entry := range declared {
-		id := piModelID(entry)
-		listed[id] = struct{}{}
-		if known, ok := byID[id]; ok {
-			entry = known
+	jaz := make(map[string]struct{}, len(jazIDs))
+	for _, id := range jazIDs {
+		jaz[id] = struct{}{}
+	}
+	out := make([]map[string]any, 0, len(models)+len(known))
+	listed := make(map[string]struct{}, len(models))
+	for _, model := range models {
+		listed[model.ID] = struct{}{}
+		entry := piModelEntry(model)
+		if _, declared := byID[model.ID]; declared {
+			if _, ours := jaz[model.ID]; !ours {
+				entry = byID[model.ID]
+			}
+		}
+		if piDeclaredThinking(cfg, model.ID) {
+			entry["reasoning"] = true
 		}
 		out = append(out, entry)
 	}
-	for _, entry := range kept {
-		if _, ok := listed[piModelID(entry)]; !ok {
-			out = append(out, entry)
+	for _, entry := range known {
+		id := piModelID(entry)
+		if _, ok := listed[id]; ok {
+			continue
 		}
+		if _, ours := jaz[id]; ours {
+			continue
+		}
+		out = append(out, entry)
 	}
 	return out
 }
 
-func piModelID(entry any) string {
-	raw, err := json.Marshal(entry)
-	if err != nil {
-		return ""
+func piModelEntry(model piModel) map[string]any {
+	entry := map[string]any{"id": model.ID}
+	if model.Name != "" {
+		entry["name"] = model.Name
 	}
-	var model piModel
-	if json.Unmarshal(raw, &model) != nil {
-		return ""
+	if model.ContextWindow > 0 {
+		entry["contextWindow"] = model.ContextWindow
 	}
-	return model.ID
+	return entry
+}
+
+func piModelID(entry map[string]any) string {
+	id, _ := entry["id"].(string)
+	return id
+}
+
+func piModelIDs(models []piModel) []string {
+	out := make([]string, 0, len(models))
+	for _, model := range models {
+		out = append(out, model.ID)
+	}
+	return out
 }
 
 // piProviderModels is the model list pi may run for a provider Jaz supplies:
 // what the provider advertises plus its default and the thread's selection, in
 // pi's provider-relative id. pi refuses a model its catalog does not list.
-func piProviderModels(source piModelSource, defaultModel, selectedProvider, selected string) []any {
+func piProviderModels(source piModelSource, defaultModel, selectedProvider, selected string) []piModel {
 	ids := []string{strings.TrimSpace(defaultModel)}
 	if selectedProvider == source.Provider {
 		_, id := modelprovider.SplitProviderModel(selected)
@@ -198,11 +259,7 @@ func piProviderModels(source piModelSource, defaultModel, selectedProvider, sele
 			models = append(models, piModel{ID: id, Name: id})
 		}
 	}
-	out := make([]any, 0, len(models))
-	for _, model := range models {
-		out = append(out, model)
-	}
-	return out
+	return models
 }
 
 // piModelSource is the endpoint a provider's model list comes from, and the key

@@ -12,9 +12,9 @@ entry the profile declared with the little Jaz knows about that model.
 rather than in Jaz's translation. With the `models.json` Jaz writes, `get_state`
 for the model reported `reasoning: false` and `thinkingLevelMap: null`, and
 `get_available_thinking_levels` reported `["off"]`. With the same provider
-declared by hand with `reasoning: true` and its levels, the same pi answered
-`["off", "low", "medium", "high", "xhigh", "max"]` after `set_model`. Nothing
-else differed, so the entry itself was the whole difference.
+declared with `reasoning: true`, the same pi answered
+`["off", "minimal", "low", "medium", "high"]` after `set_model`, its own
+default levels — `reasoning` alone is the whole difference.
 
 pi documents this: a `models` entry field defaults `reasoning` to `false`, and
 "levels the model does not map use the provider's default value through high;
@@ -22,18 +22,29 @@ xhigh and max are unsupported". An entry Jaz writes with only an `id`,
 `name` and `contextWindow` is therefore a model pi runs at `off` alone.
 
 Jaz's own sources say nothing about reasoning: an OpenAI-compatible provider's
-`/models` response lists ids, names and context lengths, and a level invented
-from a model name would be exactly the guess decisions 0007 and 0010 refuse.
+`/models` response lists ids, names and context lengths (`commandcode`'s returns
+`supported_endpoints` and nothing about thinking), and a level invented from a
+model name would be exactly the guess decisions 0007 and 0010 refuse. So the
+fact travels from where a person states it.
 
 ## What Jaz writes now
 
-- A model entry the profile already declares is carried over verbatim, so its
-  `reasoning`, `thinkingLevelMap`, `input`, `cost`, `maxTokens` and anything
-  else stay pi's own word about that model.
-- A model only the profile lists is left alone. Jaz never removes a model it
-  did not add, and pi still runs it.
-- A model Jaz adds gets its id, name and context window, and nothing more: pi
-  reads that as a model without thinking, which is what Jaz actually knows.
+A model provider may declare, in Settings > Model Providers, the models its
+endpoint does not describe as thinking but that do think (`reasoning_models`).
+That is a statement by a person, not a guess: Jaz writes `reasoning: true` for
+exactly those models and nothing else about them.
+
+- An entry already in `models.json` that Jaz did not add is carried over as it
+  is, so its `reasoning`, `thinkingLevelMap`, `input`, `cost` and anything else
+  stay the declaration it is. Jaz never drops one either.
+- An entry Jaz added before is rewritten from the provider's current list, so a
+  renamed model takes effect and a retired one leaves. `jazModels` in the file
+  records which ids are Jaz's own.
+- A model Jaz adds for the first time gets its id, name and context window, and
+  — when declared — `reasoning: true`. pi fills in that model's levels itself.
+
+A `models.json` that names no providers, or names `null`, is read as none: the
+file is Jaz's own declaration point and a blank one must not stop a thread.
 
 `models.json` remains Jaz's declaration file, so a provider Jaz has no models
 for still keeps its declaration — pi's own `auth login` needs it, and a stored
@@ -50,7 +61,12 @@ picker guesses nothing.
 
 ## Verification
 
-A test pins the redeclaration: a profile that already declares
-`deepseek/deepseek-v4.1-flash` with `reasoning` and a level map keeps them after
-`PreparePiProfile` declares the same provider from Jaz's Model Providers. Real
-pi 1.5.2 answers the six levels above once the entry survives.
+Tests pin the three behaviours: a declared thinking model reaches `models.json`
+as `reasoning: true`; a model Jaz added is refreshed from the provider's later
+answer and a retired one leaves, while an untouched entry keeps its fields; and
+a `{"providers": null}` file no longer panics the refresh.
+
+Against real pi 1.5.2 with the declaration Jaz now writes, `set_model` on
+`commandcode/deepseek/deepseek-v4.1-flash` reports `reasoning: true` and
+`get_available_thinking_levels` answers `["off","minimal","low","medium","high"]`
+— pi's own defaults for a model it was told thinks, not levels Jaz states.
