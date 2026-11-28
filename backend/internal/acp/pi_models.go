@@ -246,10 +246,20 @@ func piProviderEntries(known []map[string]any, jazIDs []string, cfg modelprovide
 	listed := make(map[string]struct{}, len(models))
 	for _, model := range models {
 		listed[model.ID] = struct{}{}
+		declared := byID[model.ID]
 		entry := piModelEntry(model)
-		if _, declared := byID[model.ID]; declared {
-			if _, ours := jaz[model.ID]; !ours {
-				entry = byID[model.ID]
+		if _, ours := jaz[model.ID]; !ours {
+			if _, ok := byID[model.ID]; ok {
+				entry = declared
+			}
+		} else {
+			// A model Jaz keeps current still carries whatever else was
+			// declared about it: Jaz states its id, name and context window,
+			// never its thinking.
+			for key, value := range declared {
+				if _, own := entry[key]; !own {
+					entry[key] = value
+				}
 			}
 		}
 		if piDeclaredThinking(cfg, model.ID) {

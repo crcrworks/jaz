@@ -151,34 +151,15 @@ func TestPreparePiProfileRefreshesItsOwnModels(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(home, "models.json"), []byte(declared), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// A provider's list is cached per endpoint, so each refresh is served by
-	// its own endpoint: the second answer is what a later refresh must see.
-	listing := func(models []map[string]any) *httptest.Server {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != "/v1/models" {
-				http.NotFound(w, r)
-				return
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": models})
-		}))
-		t.Cleanup(server.Close)
-		return server
-	}
-	first := listing([]map[string]any{
-		{"id": "flash", "name": "Flash", "context_length": 1000000},
-		{"id": "retired", "name": "Retired", "context_length": 1000000},
-	})
-	second := listing([]map[string]any{{"id": "flash", "name": "Flash 2", "context_length": 2000000}})
-	for _, base := range []string{first.URL + "/v1", second.URL + "/v1"} {
-		providers := map[string]provider.ModelProviderConfig{
-			"commandcode": {Type: "openai-compatible", BaseURL: base, APIKey: "k"},
-		}
-		if _, err := acp.PreparePiProfile(root, map[string]string{}, providers, ""); err != nil {
-			t.Fatal(err)
-		}
-	}
 	// The provider now calls it "Flash 2" with a doubled window, but that entry
 	// is a person's: what they declared about it stays as they declared it.
+	refreshPiProfile(t, root,
+		[]map[string]any{
+			{"id": "flash", "name": "Flash", "context_length": 1000000},
+			{"id": "retired", "name": "Retired", "context_length": 1000000},
+		},
+		[]map[string]any{{"id": "flash", "name": "Flash 2", "context_length": 2000000}},
+	)
 	models := piModels2026(t, root)["commandcode"]
 	if len(models) != 1 || models[0]["id"] != "flash" || models[0]["reasoning"] != true {
 		t.Fatalf("declared entry not kept as declared: %+v", models)
@@ -193,35 +174,49 @@ func TestPreparePiProfileRefreshesItsOwnModels(t *testing.T) {
 func TestPreparePiProfileRefreshesWhatJazAdded(t *testing.T) {
 	clearProviderEnv(t)
 	root := t.TempDir()
-	// A provider's list is cached per endpoint, so each refresh is served by
-	// its own endpoint: the second answer is what a later refresh must see.
-	listing := func(models []map[string]any) *httptest.Server {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != "/v1/models" {
-				http.NotFound(w, r)
-				return
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": models})
-		}))
-		t.Cleanup(server.Close)
-		return server
-	}
-	first := listing([]map[string]any{
-		{"id": "flash", "name": "Flash", "context_length": 1000000},
-		{"id": "retired", "name": "Retired", "context_length": 1000000},
-	})
-	second := listing([]map[string]any{{"id": "flash", "name": "Flash 2", "context_length": 2000000}})
-	for _, base := range []string{first.URL + "/v1", second.URL + "/v1"} {
-		providers := map[string]provider.ModelProviderConfig{
-			"commandcode": {Type: "openai-compatible", BaseURL: base, APIKey: "k"},
-		}
-		if _, err := acp.PreparePiProfile(root, map[string]string{}, providers, ""); err != nil {
-			t.Fatal(err)
-		}
-	}
+	refreshPiProfile(t, root,
+		[]map[string]any{
+			{"id": "flash", "name": "Flash", "context_length": 1000000},
+			{"id": "retired", "name": "Retired", "context_length": 1000000},
+		},
+		[]map[string]any{{"id": "flash", "name": "Flash 2", "context_length": 2000000}},
+	)
 	models := piModels2026(t, root)["commandcode"]
 	if len(models) != 1 || models[0]["id"] != "flash" || models[0]["name"] != "Flash 2" || models[0]["contextWindow"] != float64(2000000) {
 		t.Fatalf("provider response not reflected: %+v", models)
+	}
+}
+
+// TestPreparePiProfileMigratesWhatJazWrote pins that the index Jaz adds to an
+// older file does not make the entries in it someone else's. Before the index
+// only Jaz wrote this file, so every entry was Jaz's own and keeps being
+// refreshed — with the fields a person declared about it still there.
+func TestPreparePiProfileMigratesWhatJazWrote(t *testing.T) {
+	clearProviderEnv(t)
+	root := t.TempDir()
+	home := filepath.Join(root, "acp", "pi")
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// A file from before the index, with thinking declared by hand.
+	older := `{"providers":{"commandcode":{"models":[` +
+		`{"id":"flash","reasoning":true,"thinkingLevelMap":{"high":"high"},"contextWindow":1000000}]}}}`
+	if err := os.WriteFile(filepath.Join(home, "models.json"), []byte(older), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	refreshPiProfile(t, root,
+		[]map[string]any{{"id": "flash", "name": "Flash", "context_length": 2000000}},
+		[]map[string]any{{"id": "flash", "name": "Flash 2", "context_length": 3000000}},
+	)
+	models := piModels2026(t, root)["commandcode"]
+	if len(models) != 1 || models[0]["name"] != "Flash 2" || models[0]["contextWindow"] != float64(3000000) {
+		t.Fatalf("Jaz's own entry stopped being refreshed: %+v", models)
+	}
+	if models[0]["reasoning"] != true {
+		t.Fatalf("the declared thinking was dropped: %+v", models[0])
+	}
+	if _, ok := models[0]["thinkingLevelMap"]; !ok {
+		t.Fatalf("the declared level map was dropped: %+v", models[0])
 	}
 }
 
@@ -251,6 +246,28 @@ func TestPreparePiProfileTakesAModelsFileWithoutProviders(t *testing.T) {
 }
 
 // piModels2026 reads the models.json Jaz wrote, per provider.
+// refreshPiProfile runs the declaration against a sequence of provider answers,
+// one refresh per answer: a provider's list is cached per endpoint, so each
+// refresh is served by its own server.
+func refreshPiProfile(t *testing.T, root string, answers ...[]map[string]any) {
+	for _, models := range answers {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/v1/models" {
+				http.NotFound(w, r)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": models})
+		}))
+		t.Cleanup(server.Close)
+		providers := map[string]provider.ModelProviderConfig{
+			"commandcode": {Type: "openai-compatible", BaseURL: server.URL + "/v1", APIKey: "k"},
+		}
+		if _, err := acp.PreparePiProfile(root, map[string]string{}, providers, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func piModels2026(t *testing.T, root string) map[string][]map[string]any {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(root, "acp", "pi", "models.json"))
