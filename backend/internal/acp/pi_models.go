@@ -25,11 +25,14 @@ const (
 
 // piModelsFile is what Jaz keeps in <profile>/models.json. JazModels names, per
 // provider, the models Jaz added: the ones it must keep current from the
-// provider's own list. Everything else in the file was declared by a person,
-// and Jaz reads it without rewriting it.
+// provider's own list. JazThinking names the ones Jaz called thinking, so a
+// declaration withdrawn there stops claiming a model thinks while the reasoning
+// someone wrote themselves stays. Everything else in the file was declared by a
+// person, and Jaz reads it without rewriting it.
 type piModelsFile struct {
-	Providers map[string]piProviderConfig `json:"providers"`
-	JazModels map[string][]string         `json:"jazModels,omitempty"`
+	Providers   map[string]piProviderConfig `json:"providers"`
+	JazModels   map[string][]string         `json:"jazModels,omitempty"`
+	JazThinking map[string][]string         `json:"jazThinking,omitempty"`
 }
 
 type piProviderConfig struct {
@@ -93,7 +96,10 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 	if file.JazModels == nil {
 		file.JazModels = map[string][]string{}
 	}
-	declared := piModelsFile{Providers: map[string]piProviderConfig{}, JazModels: map[string][]string{}}
+	if file.JazThinking == nil {
+		file.JazThinking = map[string][]string{}
+	}
+	declared := piModelsFile{Providers: map[string]piProviderConfig{}, JazModels: map[string][]string{}, JazThinking: map[string][]string{}}
 	supplied := []string{}
 	for _, resolved := range modelprovider.ResolveModelProviders(providers) {
 		keyEnv := modelprovider.ConfiguredAPIKeyEnv(resolved.ID, resolved.Config)
@@ -138,14 +144,16 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 		for _, entry := range known.Models {
 			entries = append(entries, entry)
 		}
+		declaredModels, thinking := piProviderEntries(entries, file.JazModels[resolved.ID], file.JazThinking[resolved.ID], resolved.Config, models)
 		declared.Providers[resolved.ID] = piProviderConfig{
 			Name:    firstNonEmpty(resolved.Config.Label, resolved.Meta.Label),
 			BaseURL: baseURL,
 			API:     piProviderAPI,
 			APIKey:  apiKey,
 			Headers: resolved.Config.Headers,
-			Models:  piProviderEntries(entries, file.JazModels[resolved.ID], resolved.Config, models),
+			Models:  declaredModels,
 		}
+		declared.JazThinking[resolved.ID] = thinking
 		// A file with no index predates it and was written by Jaz alone, so
 		// everything it lists is Jaz's.
 		written, indexed := file.JazModels[resolved.ID]
@@ -157,6 +165,7 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 	for id, provider := range declared.Providers {
 		file.Providers[id] = provider
 		file.JazModels[id] = declared.JazModels[id]
+		file.JazThinking[id] = declared.JazThinking[id]
 	}
 	if len(declared.Providers) > 0 {
 		data, err := json.MarshalIndent(file, "", "  ")
@@ -233,7 +242,19 @@ func piModelIDsOf(entries []map[string]any) []string {
 // A provider's /models list says ids, names and context lengths, never whether
 // a model thinks. A model a person declared as thinking carries that, and only
 // that: pi fills in its own levels, which Jaz never states.
-func piProviderEntries(known []map[string]any, jazIDs []string, cfg modelprovider.ModelProviderConfig, models []piModel) []map[string]any {
+// piProviderEntries is a provider's model list after this refresh, plus which
+// of the models Jaz called thinking: the ones a person declared on the provider.
+//
+// A model Jaz added is refreshed from the provider's own list, so a rename
+// takes effect and a retired model leaves. Whether it thinks is not part of
+// that list, so it is decided here from the declaration: one Jaz wrote itself
+// stops applying when it is withdrawn, while a reasoning someone wrote into
+// models.json by hand is theirs and stays.
+//
+// Every entry Jaz did not add is carried over as it is. pi reads an entry
+// without reasoning as a model that cannot think, so replacing one would drop
+// what it was told about that model.
+func piProviderEntries(known []map[string]any, jazIDs, jazThinking []string, cfg modelprovider.ModelProviderConfig, models []piModel) ([]map[string]any, []string) {
 	byID := make(map[string]map[string]any, len(known))
 	for _, entry := range known {
 		byID[piModelID(entry)] = entry
@@ -242,28 +263,42 @@ func piProviderEntries(known []map[string]any, jazIDs []string, cfg modelprovide
 	for _, id := range jazIDs {
 		jaz[id] = struct{}{}
 	}
+	thought := make(map[string]struct{}, len(jazThinking))
+	for _, id := range jazThinking {
+		thought[id] = struct{}{}
+	}
 	out := make([]map[string]any, 0, len(models)+len(known))
+	thinking := make([]string, 0, len(models))
 	listed := make(map[string]struct{}, len(models))
 	for _, model := range models {
 		listed[model.ID] = struct{}{}
-		declared := byID[model.ID]
+		declared, ours := byID[model.ID], false
+		if _, ok := jaz[model.ID]; ok {
+			ours = true
+		}
+		thinks := piDeclaredThinking(cfg, model.ID)
+		if thinks {
+			thinking = append(thinking, model.ID)
+		}
 		entry := piModelEntry(model)
-		if _, ours := jaz[model.ID]; !ours {
-			if _, ok := byID[model.ID]; ok {
-				entry = declared
-			}
-		} else {
-			// A model Jaz keeps current still carries whatever else was
-			// declared about it: Jaz states its id, name and context window,
-			// never its thinking.
+		if ours {
+			// Jaz states a model's id, name and context window; everything else
+			// the entry already held is still what someone declared about it.
 			for key, value := range declared {
 				if _, own := entry[key]; !own {
 					entry[key] = value
 				}
 			}
+		} else if declared != nil {
+			entry = declared
 		}
-		if piDeclaredThinking(cfg, model.ID) {
+		// Whether it thinks is the provider's declaration and no entry's own
+		// word: one Jaz wrote and no longer sees declared stops applying, while
+		// a reasoning someone wrote into models.json by hand is theirs.
+		if thinks {
 			entry["reasoning"] = true
+		} else if _, was := thought[model.ID]; ours && was {
+			delete(entry, "reasoning")
 		}
 		out = append(out, entry)
 	}
@@ -277,7 +312,7 @@ func piProviderEntries(known []map[string]any, jazIDs []string, cfg modelprovide
 		}
 		out = append(out, entry)
 	}
-	return out
+	return out, thinking
 }
 
 func piModelEntry(model piModel) map[string]any {

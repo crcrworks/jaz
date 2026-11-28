@@ -43,6 +43,15 @@ exactly those models and nothing else about them.
 - A model Jaz adds for the first time gets its id, name and context window, and
   — when declared — `reasoning: true`. pi fills in that model's levels itself.
 
+`reasoning` is the one field that does not simply survive a refresh. Jaz writes
+it from the declaration, so withdrawing the declaration has to stop it, or the
+picker keeps offering levels nothing backs any more. A `reasoning` written into
+`models.json` by hand is a person's word, though, and stays; `jazThinking` in the
+file records which ids Jaz itself called thinking, so a refresh can tell the two
+apart. The same distinction runs through a file older than the index: only Jaz
+wrote it, so its entries stay Jaz's, but a `reasoning` in it was nobody's
+declaration by Jaz and is left alone.
+
 A `models.json` that names no providers, or names `null`, is read as none: the
 file is Jaz's own declaration point and a blank one must not stop a thread.
 
@@ -61,10 +70,11 @@ picker guesses nothing.
 
 ## Verification
 
-Tests pin the three behaviours: a declared thinking model reaches `models.json`
-as `reasoning: true`; a model Jaz added is refreshed from the provider's later
-answer and a retired one leaves, while an untouched entry keeps its fields; and
-a `{"providers": null}` file no longer panics the refresh.
+Tests pin the four behaviours: a declared thinking model reaches `models.json`
+as `reasoning: true`; withdrawing that declaration removes it again; a model Jaz
+added is refreshed from the provider's later answer and a retired one leaves,
+while an untouched entry keeps its fields and so does a hand-written
+`reasoning`; and a `{"providers": null}` file no longer panics the refresh.
 
 Against real pi 1.5.2 with the declaration Jaz now writes, `set_model` on
 `commandcode/deepseek/deepseek-v4.1-flash` reports `reasoning: true` and

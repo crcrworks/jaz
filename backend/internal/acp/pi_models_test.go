@@ -187,6 +187,26 @@ func TestPreparePiProfileRefreshesWhatJazAdded(t *testing.T) {
 	}
 }
 
+// TestPreparePiProfileWithdrawsAThinkingDeclaration pins that what Jaz wrote for
+// a model follows the declaration now: withdrawing it stops claiming the model
+// thinks, or the picker keeps offering levels nothing backs any more.
+func TestPreparePiProfileWithdrawsAThinkingDeclaration(t *testing.T) {
+	clearProviderEnv(t)
+	root := t.TempDir()
+	answer := []map[string]any{{"id": "flash", "name": "Flash", "context_length": 1000000}}
+	declaring := []string{"flash"} // a person declared it thinking
+	refreshDeclaring(t, root, declaring, answer)
+	refreshDeclaring(t, root, nil, answer) // and then withdrew
+
+	models := piModels2026(t, root)["commandcode"]
+	if len(models) != 1 || models[0]["id"] != "flash" {
+		t.Fatalf("model not declared: %+v", models)
+	}
+	if _, ok := models[0]["reasoning"]; ok {
+		t.Fatalf("withdrawn declaration still claims thinking: %+v", models[0])
+	}
+}
+
 // TestPreparePiProfileMigratesWhatJazWrote pins that the index Jaz adds to an
 // older file does not make the entries in it someone else's. Before the index
 // only Jaz wrote this file, so every entry was Jaz's own and keeps being
@@ -250,6 +270,11 @@ func TestPreparePiProfileTakesAModelsFileWithoutProviders(t *testing.T) {
 // one refresh per answer: a provider's list is cached per endpoint, so each
 // refresh is served by its own server.
 func refreshPiProfile(t *testing.T, root string, answers ...[]map[string]any) {
+	refreshDeclaring(t, root, nil, answers...)
+}
+
+// refreshDeclaring refreshes with a person's thinking declarations in place.
+func refreshDeclaring(t *testing.T, root string, reasoning []string, answers ...[]map[string]any) {
 	for _, models := range answers {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/v1/models" {
@@ -260,7 +285,7 @@ func refreshPiProfile(t *testing.T, root string, answers ...[]map[string]any) {
 		}))
 		t.Cleanup(server.Close)
 		providers := map[string]provider.ModelProviderConfig{
-			"commandcode": {Type: "openai-compatible", BaseURL: server.URL + "/v1", APIKey: "k"},
+			"commandcode": {Type: "openai-compatible", BaseURL: server.URL + "/v1", APIKey: "k", Reasoning: reasoning},
 		}
 		if _, err := acp.PreparePiProfile(root, map[string]string{}, providers, ""); err != nil {
 			t.Fatal(err)
