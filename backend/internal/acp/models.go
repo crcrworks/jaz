@@ -10,6 +10,7 @@ import (
 
 	acpschema "github.com/gluonfield/acp-transport/acp"
 	"github.com/gluonfield/acp-transport/jsonrpc"
+	"github.com/wins/jaz/backend/internal/reasoning"
 )
 
 const agentMethodSessionSetModel = "session/set_model"
@@ -18,7 +19,6 @@ const sessionConfigModel = "model"
 const sessionConfigReasoningEffort = "reasoning_effort"
 const claudeSessionConfigEffort = "effort"
 const sessionConfigThoughtLevel = "thought_level"
-const claudeReasoningEffortUltracode = "ultracode"
 
 type ReasoningEffortOption struct {
 	Value string `json:"value"`
@@ -86,55 +86,47 @@ type agentPolicy struct {
 	mcpServersFromSession bool
 }
 
-var baseReasoningEffortOptions = []ReasoningEffortOption{
-	{Value: "", Label: "Default"},
-	{Value: "minimal", Label: "Minimal"},
-	{Value: "low", Label: "Low"},
-	{Value: "medium", Label: "Medium"},
-	{Value: "high", Label: "High"},
-	{Value: "xhigh", Label: "Extra high"},
+// effortLevels are the levels each agent accepts, in the order it lists them.
+// They are per-agent data because a harness really does own its own names: pi
+// calls thinking off "off", Claude has "ultracode", Codex has "ultra", and
+// OpenCode names "none" among a model's thinking levels. The vocabulary, order
+// and labels come from the shared reasoning package.
+var effortLevels = map[string][]string{
+	AgentClaude:   {reasoning.Minimal, reasoning.Low, reasoning.Medium, reasoning.High, reasoning.XHigh, reasoning.Max, reasoning.Ultracode},
+	AgentCodex:    {reasoning.Minimal, reasoning.Low, reasoning.Medium, reasoning.High, reasoning.XHigh, reasoning.Max, reasoning.Ultra},
+	AgentGrok:     {reasoning.Low, reasoning.Medium, reasoning.High, reasoning.XHigh},
+	AgentOpenCode: {reasoning.Minimal, reasoning.Low, reasoning.Medium, reasoning.High, reasoning.XHigh, reasoning.None, reasoning.Max},
+	AgentMuse:     {reasoning.Minimal, reasoning.Low, reasoning.Medium, reasoning.High, reasoning.XHigh, reasoning.Max, reasoning.Ultra, reasoning.None},
+	AgentPi:       {reasoning.Off, reasoning.Minimal, reasoning.Low, reasoning.Medium, reasoning.High, reasoning.XHigh, reasoning.Max},
 }
 
-var grokReasoningEffortOptions = []ReasoningEffortOption{
-	{Value: "", Label: "Default"},
-	{Value: "low", Label: "Low"},
-	{Value: "medium", Label: "Medium"},
-	{Value: "high", Label: "High"},
-	{Value: "xhigh", Label: "Extra high"},
+// defaultEffortLevels are the levels an agent whose own levels Jaz does not know
+// gets.
+var defaultEffortLevels = []string{reasoning.Minimal, reasoning.Low, reasoning.Medium, reasoning.High, reasoning.XHigh}
+
+func effortOptions(levels []string) []ReasoningEffortOption {
+	options := make([]ReasoningEffortOption, 0, len(levels)+1)
+	options = append(options, ReasoningEffortOption{Label: reasoning.Label("")})
+	for _, level := range levels {
+		options = append(options, ReasoningEffortOption{Value: level, Label: reasoning.Label(level)})
+	}
+	return options
 }
 
-var claudeReasoningEffortOptions = append(append([]ReasoningEffortOption(nil), baseReasoningEffortOptions...),
-	ReasoningEffortOption{Value: "max", Label: "Max"},
-	ReasoningEffortOption{Value: claudeReasoningEffortUltracode, Label: "Ultracode"},
-)
+var defaultEffortOptions = effortOptions(defaultEffortLevels)
 
-var codexReasoningEffortOptions = append(append([]ReasoningEffortOption(nil), baseReasoningEffortOptions...),
-	ReasoningEffortOption{Value: "max", Label: "Max"},
-	ReasoningEffortOption{Value: "ultra", Label: "Ultra"},
-)
+var agentEffortOptions = func() map[string][]ReasoningEffortOption {
+	options := make(map[string][]ReasoningEffortOption, len(effortLevels))
+	for agent, levels := range effortLevels {
+		options[agent] = effortOptions(levels)
+	}
+	return options
+}()
 
-// OpenCode's ACP names "none" among a model's thinking levels, so Jaz keeps it
-// as a level of its own instead of clearing the effort as it does elsewhere.
-var openCodeReasoningEffortOptions = append(append([]ReasoningEffortOption(nil), baseReasoningEffortOptions...),
-	ReasoningEffortOption{Value: "none", Label: "None"},
-	ReasoningEffortOption{Value: "max", Label: "Max"},
-)
-
-var museReasoningEffortOptions = append(append([]ReasoningEffortOption(nil), codexReasoningEffortOptions...),
-	ReasoningEffortOption{Value: "none", Label: "None"},
-)
-
-// pi's own thinking levels, in its order: no "none" level, and "max" beyond
-// xhigh.
-var piReasoningEffortOptions = []ReasoningEffortOption{
-	{Value: "", Label: "Default"},
-	{Value: "off", Label: "Off"},
-	{Value: "minimal", Label: "Minimal"},
-	{Value: "low", Label: "Low"},
-	{Value: "medium", Label: "Medium"},
-	{Value: "high", Label: "High"},
-	{Value: "xhigh", Label: "Extra high"},
-	{Value: "max", Label: "Max"},
+// ReasoningEfforts is the whole vocabulary, for a client that renders levels
+// before it knows which agent and model a turn will use.
+func ReasoningEfforts() []ReasoningEffortOption {
+	return effortOptions(reasoning.Levels)
 }
 
 func agentPolicyForAgent(agentName string) agentPolicy {
@@ -144,7 +136,7 @@ func agentPolicyForAgent(agentName string) agentPolicy {
 			modelConfigID:        sessionConfigModel,
 			effortConfigID:       claudeSessionConfigEffort,
 			materializesOnPrompt: true,
-			effortOptions:        claudeReasoningEffortOptions,
+			effortOptions:        agentEffortOptions[AgentClaude],
 			ultracodeSetting:     true,
 			promptSuggestions:    true,
 		}
@@ -159,7 +151,7 @@ func agentPolicyForAgent(agentName string) agentPolicy {
 			promptPersistsOnRestore: true,
 			materializesOnPrompt:    true,
 			unadvertisedModel:       unadvertisedModelSkipped,
-			effortOptions:           codexReasoningEffortOptions,
+			effortOptions:           agentEffortOptions[AgentCodex],
 		}
 	case AgentKimi:
 		return agentPolicy{
@@ -174,7 +166,7 @@ func agentPolicyForAgent(agentName string) agentPolicy {
 		return agentPolicy{
 			modelMetaKey:      "modelId",
 			unadvertisedModel: unadvertisedModelRejected,
-			effortOptions:     grokReasoningEffortOptions,
+			effortOptions:     agentEffortOptions[AgentGrok],
 		}
 	case AgentOpenCode:
 		return agentPolicy{
@@ -182,7 +174,7 @@ func agentPolicyForAgent(agentName string) agentPolicy {
 			effortConfigID:          claudeSessionConfigEffort,
 			modelConfiguredAtLaunch: true,
 			effortsPerModel:         true,
-			effortOptions:           openCodeReasoningEffortOptions,
+			effortOptions:           agentEffortOptions[AgentOpenCode],
 		}
 	case AgentAntigravity:
 		return agentPolicy{
@@ -194,20 +186,20 @@ func agentPolicyForAgent(agentName string) agentPolicy {
 			modelConfigID:        sessionConfigModel,
 			effortConfigID:       sessionConfigReasoningEffort,
 			systemPromptAtLaunch: true,
-			effortOptions:        museReasoningEffortOptions,
+			effortOptions:        agentEffortOptions[AgentMuse],
 		}
 	case AgentPi:
 		// pi appends the session prompt to its own at every launch (resume
 		// included), and owns its model ids ("provider/id"), its
 		// thinking-level names, and which models it will run.
 		return agentPolicy{
-			modelConfigID:          sessionConfigModel,
-			effortConfigID:         sessionConfigThoughtLevel,
-			systemPromptAtLaunch:   true,
+			modelConfigID:           sessionConfigModel,
+			effortConfigID:          sessionConfigThoughtLevel,
+			systemPromptAtLaunch:    true,
 			promptPersistsOnRestore: true,
-			unadvertisedModel:      unadvertisedModelRejected,
-			effortOptions:          piReasoningEffortOptions,
-			mcpServersFromSession:  true,
+			unadvertisedModel:       unadvertisedModelRejected,
+			effortOptions:           agentEffortOptions[AgentPi],
+			mcpServersFromSession:   true,
 		}
 	case AgentCopilot:
 		return agentPolicy{
@@ -227,7 +219,7 @@ func agentPolicyForAgent(agentName string) agentPolicy {
 	default:
 		return agentPolicy{
 			effortConfigID: sessionConfigReasoningEffort,
-			effortOptions:  baseReasoningEffortOptions,
+			effortOptions:  defaultEffortOptions,
 		}
 	}
 }
@@ -278,35 +270,46 @@ func (p agentPolicy) supportsReasoningEffort(value string) bool {
 	return false
 }
 
+// normalizeReasoningEffort resolves a stored level against the agent's own
+// levels. An agent that names "none" among its levels means thinking off by it,
+// and every other agent reads "none" as "no level chosen"; an agent's own name
+// for its default, as OpenCode's "default", is Jaz's empty effort too. An agent
+// whose levels Jaz does not know keeps its own spelling, which only the agent
+// can accept or refuse.
 func (p agentPolicy) normalizeReasoningEffort(value string) (string, error) {
 	value = strings.TrimSpace(value)
-	if strings.EqualFold(value, "none") && !p.supportsReasoningEffort("none") {
-		value = ""
+	// An agent that names "none" among its levels means thinking off by it; for
+	// every other agent "none" is a request for no effort at all.
+	if strings.EqualFold(value, reasoning.None) && !p.supportsReasoningEffort(reasoning.None) {
+		return "", nil
 	}
+	// An agent whose levels Jaz does not know keeps its own spelling, which only
+	// the agent can accept or refuse.
 	if len(p.effortOptions) == 0 {
 		return value, nil
 	}
 	value = strings.ToLower(value)
-	for _, option := range p.effortOptions {
-		if option.Value == value {
-			return value, nil
-		}
-	}
 	// An agent names its own default as a level, as OpenCode does with
 	// "default"; that is Jaz's empty effort, not a level a session is pinned to.
-	if value == "default" && p.supportsReasoningEffort("") {
+	if value == "default" {
 		return "", nil
+	}
+	if value == "" || p.supportsReasoningEffort(value) {
+		return value, nil
 	}
 	return "", fmt.Errorf("unknown reasoning effort %q; valid values are %s", value, strings.Join(reasoningEffortValues(p.effortOptions), ", "))
 }
 
+// sessionConfigEffort is the value the agent's own session config receives.
+// Claude reaches its "ultracode" through a setting beside the effort, so the
+// effort config itself takes xhigh.
 func (p agentPolicy) sessionConfigEffort(value string) string {
 	effort, err := p.normalizeReasoningEffort(value)
 	if err != nil {
 		return strings.TrimSpace(value)
 	}
-	if p.ultracodeSetting && effort == claudeReasoningEffortUltracode {
-		return "xhigh"
+	if p.ultracodeSetting && effort == reasoning.Ultracode {
+		return reasoning.XHigh
 	}
 	return effort
 }
@@ -327,7 +330,7 @@ func (p agentPolicy) mergeSessionMeta(meta map[string]any, cfg AgentConfig, sour
 		nestedMap(nestedMap(meta, "claudeCode"), "options")["promptSuggestions"] = false
 	}
 	normalized, err := p.normalizeReasoningEffort(cfg.ReasoningEffort)
-	if err != nil || !p.ultracodeSetting || normalized != claudeReasoningEffortUltracode {
+	if err != nil || !p.ultracodeSetting || normalized != reasoning.Ultracode {
 		return meta
 	}
 	if meta == nil {
@@ -336,7 +339,7 @@ func (p agentPolicy) mergeSessionMeta(meta map[string]any, cfg AgentConfig, sour
 	claudeCode := nestedMap(meta, "claudeCode")
 	options := nestedMap(claudeCode, "options")
 	settings := nestedMap(options, "settings")
-	settings[claudeReasoningEffortUltracode] = true
+	settings[reasoning.Ultracode] = true
 	return meta
 }
 
@@ -926,10 +929,9 @@ func cutReasoningEffort(model string) (base, effort string, ok bool) {
 	if i < 0 {
 		return model, "", false
 	}
-	switch strings.ToLower(strings.TrimSpace(model[i+1:])) {
-	case "minimal", "low", "medium", "high", "xhigh", "max":
-		return model[:i], model[i+1:], true
-	default:
+	effort = strings.ToLower(strings.TrimSpace(model[i+1:]))
+	if _, err := reasoning.NormalizeIn(effort, reasoning.Graded); err != nil {
 		return model, "", false
 	}
+	return model[:i], effort, true
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/wins/jaz/backend/internal/modelcatalog"
 	"github.com/wins/jaz/backend/internal/provider"
+	"github.com/wins/jaz/backend/internal/reasoning"
 )
 
 var ErrReasoningCapabilitiesUnavailable = errors.New("reasoning capabilities are unavailable")
@@ -233,7 +234,7 @@ func resolveModelCapabilities(agent string, models []modelcatalog.Model, allowAg
 			resolved.Reasoning.Mandatory = model.Reasoning.Mandatory
 			resolved.Reasoning.Automatic = model.Reasoning.Automatic
 			if agent == AgentClaude && containsString(resolved.Reasoning.Efforts, "xhigh") {
-				resolved.Reasoning.Efforts = addReasoningEffort(resolved.Reasoning.Efforts, claudeReasoningEffortUltracode)
+				resolved.Reasoning.Efforts = addReasoningEffort(resolved.Reasoning.Efforts, reasoning.Ultracode)
 			}
 		case modelcatalog.ReasoningUnknown, modelcatalog.ReasoningUnavailable, modelcatalog.ReasoningPending:
 			if allowAgentCapabilities {

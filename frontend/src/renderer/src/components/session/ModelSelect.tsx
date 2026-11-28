@@ -97,6 +97,7 @@ export function ModelSelect({
   effort,
   suggestions,
   effortOptions,
+  effortLabels,
   effortWhy,
   agent,
   loading,
@@ -110,6 +111,9 @@ export function ModelSelect({
   effort: string
   suggestions: ModelPickerOption[]
   effortOptions: ReasoningEffortOption[]
+  // effortLabels names levels the picker does not show as a stop, such as a
+  // saved "minimal" on an agent whose track starts at low.
+  effortLabels?: ReasoningEffortOption[]
   // why says why a model leaves no level to choose, when that is known.
   effortWhy?: string
   // Puts the agent's logo on the button and, with several options, agent tabs in the picker.
@@ -134,7 +138,7 @@ export function ModelSelect({
   const automatic = selected?.reasoning?.automatic && effortOptions.length === 0
   const effortLabel = automatic
     ? 'Thinking'
-    : effortOptions.length ? reasoningEffortLabel(effortValue, effortOptions) : ''
+    : effortOptions.length ? reasoningEffortLabel(effortValue, effortOptions, effortLabels) : ''
   const effortClass = effortValue === 'ultra' || effortValue === 'ultracode' ? 'jaz-gradient' : ''
   const fast = fastMode?.checked === true
   const agentDirection = useDirection(agent ? agent.options.indexOf(agent.value) : 0)

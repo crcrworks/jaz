@@ -7,8 +7,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/wins/jaz/backend/internal/mcpsession"
+	"github.com/wins/jaz/backend/internal/reasoning"
 )
 
 type MCPService interface {
@@ -94,11 +96,13 @@ func (t *MCPTools) AddTo(server *mcp.Server) {
 		Name:        "loop_create",
 		Title:       "Create Jaz loop",
 		Description: "Create a routine: a prompt a Jaz bot runs on a schedule or when a trigger fires. Called from a bot's thread, the routine belongs to that bot; otherwise pass bot, or a new bot named after the routine is created (acp_agent and model configure that new bot)." + agentHint,
+		InputSchema: effortSchema[MCPCreateInput](),
 	}, t.Create)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "loop_update",
 		Title:       "Update Jaz loop",
 		Description: "Update an existing Jaz loop." + agentHint,
+		InputSchema: effortSchema[MCPUpdateInput](),
 	}, t.Update)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "loop_run",
@@ -117,6 +121,26 @@ func (t *MCPTools) AddTo(server *mcp.Server) {
 			Description: "List Jaz boards a loop's widget can be assigned to via board_ids on loop_create/loop_update.",
 		}, t.Boards)
 	}
+}
+
+// effortSchema constrains reasoning_effort to the levels Jaz stores, so a
+// routine can name any level a picker offers instead of the schema refusing it.
+func effortSchema[T any]() *jsonschema.Schema {
+	schema, err := jsonschema.For[T](nil)
+	if err != nil {
+		panic(err)
+	}
+	field := schema.Properties["reasoning_effort"]
+	enum := make([]any, 0, len(reasoning.Levels)+2)
+	if slices.Contains(field.Types, "null") {
+		enum = append(enum, nil)
+	}
+	enum = append(enum, "")
+	for _, level := range reasoning.Levels {
+		enum = append(enum, level)
+	}
+	field.Enum = enum
+	return schema
 }
 
 // availableAgents returns the enabled ACP agent names, or nil when no lister is wired.
@@ -213,7 +237,7 @@ type MCPCreateInput struct {
 	ACPAgent        string   `json:"acp_agent,omitempty" jsonschema:"ACP agent that runs the loop; see this tool's description for the available agents. Omit to use the workspace default agent."`
 	ModelProvider   string   `json:"model_provider,omitempty"`
 	Model           string   `json:"model,omitempty"`
-	ReasoningEffort string   `json:"reasoning_effort,omitempty" jsonschema:"none, off, minimal, low, medium, high, xhigh, max"`
+	ReasoningEffort string   `json:"reasoning_effort,omitempty" jsonschema:"thinking level for the loop's runs, from the enumerated values"`
 	Directory       string   `json:"directory,omitempty" jsonschema:"workspace-relative or absolute directory for loop runs"`
 	BoardIDs        []string `json:"board_ids,omitempty" jsonschema:"board ids to place this loop's widget on; assignment is what enables the widget. Use loop_boards to list ids."`
 	Bot             string   `json:"bot,omitempty" jsonschema:"id of the bot that owns the routine; defaults to the calling bot. A routine on a board belongs to the board"`
@@ -254,7 +278,7 @@ type MCPUpdateInput struct {
 	ACPAgent        *string   `json:"acp_agent,omitempty" jsonschema:"ACP agent that runs the loop; see this tool's description for the available agents."`
 	ModelProvider   *string   `json:"model_provider,omitempty"`
 	Model           *string   `json:"model,omitempty"`
-	ReasoningEffort *string   `json:"reasoning_effort,omitempty" jsonschema:"none, off, minimal, low, medium, high, xhigh, max"`
+	ReasoningEffort *string   `json:"reasoning_effort,omitempty" jsonschema:"thinking level for the loop's runs, from the enumerated values"`
 	Directory       *string   `json:"directory,omitempty"`
 	Trigger         *Trigger  `json:"trigger,omitempty" jsonschema:"switch the routine to an event trigger; setting schedule switches it back"`
 	WhenMissed      *string   `json:"when_missed,omitempty" jsonschema:"skip or catch_up; see loop_create"`

@@ -18,6 +18,9 @@ export interface ModelReasoningState {
   defaultModel?: string
   modelsError?: string
   reasoningOptions: ReasoningEffortOption[]
+  // reasoningLabels is the server's vocabulary, so a level the picker does not
+  // show as a stop still reads with its own name.
+  reasoningLabels: ReasoningEffortOption[]
   effectiveReasoningEffort: string
   reasoningEffortSupported: boolean
   reasoningStatus: ModelReasoningSelection['status']
@@ -70,6 +73,7 @@ export function useModelReasoningState({
       ? 'No models reported by this agent.'
       : undefined),
     reasoningOptions: reasoning.options,
+    reasoningLabels: settings?.reasoning ?? [],
     effectiveReasoningEffort: reasoning.effectiveEffort,
     reasoningEffortSupported: reasoning.supported,
     reasoningStatus: reasoning.status,

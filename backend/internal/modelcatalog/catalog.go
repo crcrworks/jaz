@@ -1,7 +1,6 @@
 package modelcatalog
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/wins/jaz/backend/internal/provider"
@@ -46,16 +45,6 @@ type Model struct {
 
 type knownModelCapabilities struct {
 	InputModalities []string
-}
-
-var reasoningEffortRank = map[string]int{
-	"none": 0, "minimal": 1, "low": 2, "medium": 3, "high": 4, "xhigh": 5, "max": 6, "ultra": 7, "ultracode": 8,
-}
-
-func sortReasoningEfforts(efforts []string) {
-	sort.SliceStable(efforts, func(i, j int) bool {
-		return reasoningEffortRank[efforts[i]] < reasoningEffortRank[efforts[j]]
-	})
 }
 
 var (
