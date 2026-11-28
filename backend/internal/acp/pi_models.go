@@ -134,30 +134,45 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 }
 
 // withDeclaredModels keeps what the profile already says about a model Jaz is
-// declaring. pi reads an entry without reasoning as a model that cannot think,
-// so replacing one with the id and context window Jaz knows turned a model pi
-// runs at six levels into one it runs at none.
+// declaring, verbatim, and keeps a model only the profile lists: pi reads an
+// entry without reasoning as a model that cannot think, so replacing one with
+// the id and context window Jaz knows turned a model pi runs at six levels into
+// one it runs at none. Jaz adds models; it never removes one.
 func withDeclaredModels(kept []any, declared []any) []any {
 	byID := make(map[string]any, len(kept))
 	for _, entry := range kept {
-		var model piModel
-		raw, err := json.Marshal(entry)
-		if err == nil && json.Unmarshal(raw, &model) == nil && model.ID != "" {
-			byID[model.ID] = entry
+		if id := piModelID(entry); id != "" {
+			byID[id] = entry
 		}
 	}
-	out := make([]any, 0, len(declared))
+	out := make([]any, 0, len(kept)+len(declared))
+	listed := make(map[string]struct{}, len(declared))
 	for _, entry := range declared {
-		var model piModel
-		raw, err := json.Marshal(entry)
-		if err == nil && json.Unmarshal(raw, &model) == nil {
-			if known, ok := byID[model.ID]; ok {
-				entry = known
-			}
+		id := piModelID(entry)
+		listed[id] = struct{}{}
+		if known, ok := byID[id]; ok {
+			entry = known
 		}
 		out = append(out, entry)
 	}
+	for _, entry := range kept {
+		if _, ok := listed[piModelID(entry)]; !ok {
+			out = append(out, entry)
+		}
+	}
 	return out
+}
+
+func piModelID(entry any) string {
+	raw, err := json.Marshal(entry)
+	if err != nil {
+		return ""
+	}
+	var model piModel
+	if json.Unmarshal(raw, &model) != nil {
+		return ""
+	}
+	return model.ID
 }
 
 // piProviderModels is the model list pi may run for a provider Jaz supplies:

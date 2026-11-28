@@ -52,9 +52,9 @@ export interface ModelReasoningSelection {
   why: string
 }
 
-// The picker says which of the two things it learnt: the agent reports this
-// model as unable to think, or it thinks but leaves no level to choose.
-const NO_REASONING = 'This model does not reason, so it has no thinking levels'
+// The picker says which of the two it learnt: the agent reports this model as
+// unable to think, or it thinks but leaves no level to choose.
+const NO_REASONING = 'The agent reports this model cannot think, so it has no thinking level'
 const NO_LEVELS = 'This model offers no thinking levels'
 const LOADING_LEVELS = 'Loading thinking levels…'
 
