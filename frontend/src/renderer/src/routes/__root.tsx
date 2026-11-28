@@ -27,7 +27,7 @@ import { Sidebar } from '@/components/sidebar/Sidebar'
 import { TitlebarNavigation } from '@/components/sidebar/TitlebarNavigation'
 import { ToastProvider } from '@/components/ui/toast'
 import { clientRuntime, isMacDesktop } from '@/lib/clientRuntime'
-import { SidebarVisibility } from '@/lib/sidebar'
+import { DismissSidebarDrawer } from '@/lib/sidebar'
 import { SidePanelSlot } from '@/lib/sidePanelSlot'
 import { VoiceProvider } from '@/lib/voice/VoiceProvider'
 import { GlobalVoice } from '@/components/session/FloatingVoice'
@@ -175,6 +175,11 @@ function RootLayout() {
   // Desktop Settings keeps its menu in the column whatever the list toggle says.
   const settingsMenu = settingsOpen && !isMobile
   const columnOpen = settingsMenu || sidebarOpen
+  // Phone only: a full-screen drawer and the full-screen panel never stack.
+  // Desktop keeps the thread list open beside the panel.
+  const dismissSidebarDrawer = useCallback(() => {
+    if (isMobile) setSidebarOpen(false)
+  }, [isMobile])
   // A specific board paints itself on bg-surface so its tiles blend; match main
   // to surface there too so no bg-bg seam shows around the board.
   const onBoard = /^\/boards\/.+/.test(pathname)
@@ -378,11 +383,11 @@ function RootLayout() {
                   </div>
                 )}
                 <main className={`scrollbar-quiet min-w-0 flex-1 overflow-y-auto pt-[var(--titlebar-height,0px)] ${onBoard ? 'bg-surface' : 'bg-bg'}`}>
-                  <SidebarVisibility.Provider value={setSidebarOpen}>
+                  <DismissSidebarDrawer.Provider value={dismissSidebarDrawer}>
                     <SidePanelSlot.Provider value={sidePanelSlot}>
                       <Outlet />
                     </SidePanelSlot.Provider>
-                  </SidebarVisibility.Provider>
+                  </DismissSidebarDrawer.Provider>
                 </main>
 
                 <MCPApps />

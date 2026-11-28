@@ -44,9 +44,12 @@ Preview reloads that URL. Empty chats create their browser surface on first use.
 Page-local state and script variables reset; imported sign-ins remain in the
 shared browser partition.
 
-Opening Preview hides the left navigation and gives the browser about 60% of
-the available content area, with an 800-pixel default minimum when space permits. The conversation
-keeps at least 360 pixels on desktop. The visible grip on the panel's left edge
+Opening Preview gives the browser about 60% of the row beside the thread list,
+with a 640-pixel preferred minimum when space permits. The conversation keeps at
+least 360 pixels on desktop, so on a narrow window the browser yields first and
+the thread list stays open. Opening, closing or switching a panel never changes
+the thread list, and only the sidebar's own control, ⌘S or the rail update its
+stored preference. The visible grip on the panel's left edge
 can be dragged in either direction or clicked and adjusted with the arrow keys.
 Each panel view retains its own resized width while the conversation is mounted.
 Reopening or resizing navigation reduces the browser width to fit the remaining
@@ -55,6 +58,8 @@ the desktop browser in the same layout pass as navigation, keeping their edges
 synchronized throughout opening, closing and interrupted animations.
 Opening, closing and switching desktop panels use the same spring curve through
 a CSS width transition. Drag resizing and Reduced Motion remain immediate.
+On a phone both surfaces are full-screen overlays, so opening a panel dismisses
+the thread drawer instead of stacking the two.
 
 ## Downloads
 
