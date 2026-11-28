@@ -9,7 +9,7 @@ import { MarkdownText } from '@/components/session/MessageMarkdown'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { botsQuery, type BotListEntry } from '@/lib/api/bots'
 import type { Bot } from '@/lib/api/types'
-import { botAvatars, type BotMood, botMood, dragSections, pinOrder, placePin } from '@/lib/bots'
+import { botAvatars, botDot, botMood, dragSections, pinOrder, placePin } from '@/lib/bots'
 import { useReducedEffectsMotion } from '@/lib/effectsMotion'
 import { useContextMenuTrigger } from '@/lib/hooks/useContextMenuTrigger'
 import { BotIcon } from './BotAvatar'
@@ -104,19 +104,6 @@ function landing(e: DragEvent, drag: PinDrag, tiles: string[]): string[] {
   return placePin(drag.pins, drag.id, tiles[cell], x - column * width > width / 2)
 }
 
-// A question waiting on the person always gets a dot, as do an unread reply
-// and a failure; work gets one only when the face holds still and can't show
-// it.
-function botDot(bot: Bot, mood: BotMood, still: boolean): { title: string; className: string } | null {
-  if (mood === 'waiting') {
-    return { title: 'Waiting for your answer', className: 'bg-accent' }
-  }
-  if ((mood === 'working' || mood === 'thinking') && !still) {
-    return null
-  }
-  return stateDot(bot)
-}
-
 // A pinned bot is a tile (face over name); the rest are rows with a preview.
 // Tiles and rows slide to new places, and scale in and out as they come and go.
 function BotEntry({ ref, bot, bots, tile = false, dragged, hidden, onDrag }: {
@@ -135,7 +122,7 @@ function BotEntry({ ref, bot, bots, tile = false, dragged, hidden, onDrag }: {
   // as a dot: on a tile's face, so its name keeps the full width, and beside a
   // row's name.
   const mood = botMood(bot)
-  const state = botDot(bot, mood, useReducedEffectsMotion())
+  const state = botDot(stateDot(bot), mood, useReducedEffectsMotion())
   const dot = state ? <span role="img" aria-label={state.title} title={state.title} className={`size-1.5 shrink-0 rounded-full ${state.className}`} /> : null
   const name = renaming ? (
     <BotNameInput

@@ -26,17 +26,30 @@ export const BOT_COLORS: Record<BotColor, string> = {
 // person to come back.
 export type BotMood = 'idle' | 'thinking' | 'working' | 'waiting' | 'failed' | 'away'
 
-export function botMood(bot: Pick<Bot, 'status' | 'waiting' | 'thinking' | 'working' | 'away'>): BotMood {
+export function botMood(bot: Pick<Bot, 'status' | 'waiting' | 'thinking' | 'working' | 'away' | 'busy'>): BotMood {
   if (bot.waiting) {
     return 'waiting'
   }
-  if (bot.status === 'running' || bot.working?.length) {
+  if (bot.status === 'running' || bot.working?.length || bot.busy) {
     return bot.thinking ? 'thinking' : 'working'
   }
   if (bot.status === 'error') {
     return 'failed'
   }
   return bot.away ? 'away' : 'idle'
+}
+
+// A question waiting on the person always gets a dot, as do an unread reply
+// and a failure; work gets one only when the face holds still and can't show
+// it, as when a child thread works and the bot's own turn ended.
+export type BotDot = { title: string; className: string }
+
+export function botDot(session: BotDot | null, mood: BotMood, still: boolean): BotDot | null {
+  if (mood === 'waiting') return { title: 'Waiting for your answer', className: 'bg-accent' }
+  if (mood === 'working' || mood === 'thinking') {
+    return still ? { title: 'Working', className: 'animate-pulse bg-running' } : null
+  }
+  return session
 }
 
 export function taskStateLabel(task: Pick<BotOwed, 'status' | 'moving' | 'blocked' | 'stalled' | 'threads'>): string {

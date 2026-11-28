@@ -85,6 +85,12 @@ func (w *fakeWorld) ListBots() ([]storage.BotRecord, error) {
 	return out, nil
 }
 
+// BusyBots leaves every bot unbusy: which threads count as a bot's running
+// work is the store's query, tested against it.
+func (w *fakeWorld) BusyBots() (map[string]bool, error) {
+	return nil, nil
+}
+
 func (w *fakeWorld) PinBots(ids []string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()

@@ -49,6 +49,10 @@ type Bot struct {
 	Members         []string  `json:"members,omitempty"`
 	// Working lists the members taking a turn in a group.
 	Working []string `json:"working,omitempty"`
+	// Busy is set while a thread of the bot's work runs: its own, a subtask or
+	// group seat it started, a routine run in a thread of its own, or a thread
+	// one of those started.
+	Busy bool `json:"busy,omitempty"`
 	// Waiting is set while the bot's thread holds a question or plan decision
 	// for the user.
 	Waiting bool `json:"waiting,omitempty"`
@@ -117,6 +121,8 @@ type Store interface {
 	CommitmentStore
 	SaveBot(storage.BotRecord) error
 	ListBots() ([]storage.BotRecord, error)
+	// BusyBots are the bots with a thread of their work running.
+	BusyBots() (map[string]bool, error)
 	PinBots(ids []string) error
 	CreateSession(storage.CreateSession) (storage.Session, error)
 	AppendTurnReply(id, message string, done []int64) error

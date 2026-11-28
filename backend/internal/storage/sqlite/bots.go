@@ -74,6 +74,19 @@ func (s *Store) ListBots() ([]storage.BotRecord, error) {
 	return records, nil
 }
 
+// BusyBots are the bots with a thread of their work running.
+func (s *Store) BusyBots() (map[string]bool, error) {
+	ids, err := botdb.New(s.db).ListBusyBots(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	busy := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		busy[id] = true
+	}
+	return busy, nil
+}
+
 // PinBots pins exactly ids, in that order, and unpins every other bot.
 func (s *Store) PinBots(ids []string) error {
 	ctx := context.Background()

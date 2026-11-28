@@ -701,6 +701,10 @@ export interface Bot {
   members?: string[]
   // The members taking a turn in a group.
   working?: string[]
+  // Set while a thread of the bot's work runs: its own, a subtask or group
+  // seat it started, a routine run in a thread of its own, or a thread one of
+  // those started. Absent from servers that predate it.
+  busy?: boolean
   // Set while the bot's thread holds a question or plan decision for the
   // person.
   waiting?: boolean

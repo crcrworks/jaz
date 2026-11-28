@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { botChat, dragSections, placePin, taskStateLabel } from './bots'
+import { botChat, botDot, botMood, dragSections, placePin, taskStateLabel } from './bots'
 import { optimisticTranscriptMessages } from './optimisticUserMessage'
 import { mergeEarlierHistory } from './sessionHistory'
 
@@ -185,4 +185,29 @@ test('task state distinguishes active work and blockers from worker completion',
 test('a closed task says how it closed, whatever its threads did', () => {
   expect(taskStateLabel({ status: 'completed', threads: [{ state: 'finished' }] })).toBe('Done')
   expect(taskStateLabel({ status: 'cancelled', threads: [{ state: 'failed' }] })).toBe('Dropped')
+})
+
+test('a bot whose own thread is quiet still works while a child thread runs', () => {
+  const bot = { status: 'idle' }
+  expect(botMood(bot)).toBe('idle')
+  expect(botMood({ ...bot, busy: true })).toBe('working')
+  // Answering the person outranks work, and a failure shows once work stops.
+  expect(botMood({ ...bot, busy: true, waiting: true })).toBe('waiting')
+  expect(botMood({ ...bot, status: 'error', busy: true })).toBe('working')
+  expect(botMood({ ...bot, status: 'error' })).toBe('failed')
+  // Thinking is still the bot's own turn before its first tool call, which is
+  // running whatever else is.
+  expect(botMood({ ...bot, status: 'running', thinking: true })).toBe('thinking')
+  expect(botMood({ ...bot, busy: true, thinking: true })).toBe('thinking')
+})
+
+test('work in another thread shows as a dot when the face holds still', () => {
+  const working = botDot(null, 'working', true)
+  expect(working?.className).toBe('animate-pulse bg-running')
+  // With motion on, the face itself says it is working, and the session row's
+  // own dot shows through once it stops.
+  expect(botDot(null, 'working', false)).toBeNull()
+  expect(botDot({ title: 'Unread reply', className: 'bg-primary' }, 'working', true)?.title).toBe('Working')
+  expect(botDot({ title: 'Unread reply', className: 'bg-primary' }, 'idle', true)?.title).toBe('Unread reply')
+  expect(botDot(null, 'waiting', true)?.className).toBe('bg-accent')
 })
