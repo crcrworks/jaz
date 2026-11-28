@@ -144,9 +144,10 @@ func TestPreparePiProfileRefreshesItsOwnModels(t *testing.T) {
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// A model Jaz never added: a person declared its thinking here.
-	declared := `{"providers":{"commandcode":{"models":[{"id":"flash",` +
-		`"reasoning":true,"cost":{"input":1}}]}}}`
+	// A model Jaz never added: a person declared its thinking here, next to the
+	// index that says which models are Jaz's own.
+	declared := `{"jazModels":{"commandcode":["retired"]},"providers":{"commandcode":{"models":[` +
+		`{"id":"flash","reasoning":true,"cost":{"input":1}}]}}}`
 	if err := os.WriteFile(filepath.Join(home, "models.json"), []byte(declared), 0o600); err != nil {
 		t.Fatal(err)
 	}

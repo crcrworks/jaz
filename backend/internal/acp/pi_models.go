@@ -146,7 +146,13 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 			Headers: resolved.Config.Headers,
 			Models:  piProviderEntries(entries, file.JazModels[resolved.ID], resolved.Config, models),
 		}
-		declared.JazModels[resolved.ID] = jazModelIDs(entries, file.JazModels[resolved.ID], models)
+		// A file with no index predates it and was written by Jaz alone, so
+		// everything it lists is Jaz's.
+		written, indexed := file.JazModels[resolved.ID]
+		if !indexed {
+			written = piModelIDsOf(entries)
+		}
+		declared.JazModels[resolved.ID] = jazModelIDs(entries, written, indexed, models)
 	}
 	for id, provider := range declared.Providers {
 		file.Providers[id] = provider
@@ -167,25 +173,53 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 	return supplied, nil
 }
 
-// jazModelIDs is which of the provider's models Jaz owns: the ones it wrote
-// last time, plus the ones it is writing for the first time. An entry already
-// in the file that Jaz did not write is a person's and never becomes Jaz's, so
-// the next refresh cannot rewrite it.
-func jazModelIDs(known []map[string]any, written []string, models []piModel) []string {
-	previously := make(map[string]struct{}, len(known))
-	for _, entry := range known {
-		previously[piModelID(entry)] = struct{}{}
+// jazModelIDs is which of the provider's models Jaz owns, and so refreshes from
+// the provider's list: the ones it wrote last time, plus the ones it is writing
+// for the first time. An entry that was already in the file and is not Jaz's is
+// a person's, and never becomes Jaz's — otherwise the next refresh would
+// replace what they declared.
+//
+// A file with no index at all predates it, and only Jaz ever wrote that file,
+// so everything in it is Jaz's and keeps being refreshed.
+func jazModelIDs(known []map[string]any, written []string, indexed bool, models []piModel) []string {
+	if !indexed {
+		return piModelIDsOfKnown(known, models)
 	}
 	ours := make(map[string]struct{}, len(written))
 	for _, id := range written {
 		ours[id] = struct{}{}
 	}
+	before := make(map[string]struct{}, len(known))
+	for _, entry := range known {
+		before[piModelID(entry)] = struct{}{}
+	}
 	out := make([]string, 0, len(models))
 	for _, model := range models {
-		_, existed := previously[model.ID]
-		if _, wrote := ours[model.ID]; wrote || !existed {
+		if _, wrote := ours[model.ID]; wrote {
+			out = append(out, model.ID)
+			continue
+		}
+		if _, existed := before[model.ID]; !existed {
 			out = append(out, model.ID)
 		}
+	}
+	return out
+}
+
+// piModelIDsOfKnown is, for a file written before the index existed, the
+// provider's models as it listed them: each is Jaz's and stays current.
+func piModelIDsOfKnown(known []map[string]any, models []piModel) []string {
+	out := make([]string, 0, len(models))
+	for _, model := range models {
+		out = append(out, model.ID)
+	}
+	return out
+}
+
+func piModelIDsOf(entries []map[string]any) []string {
+	out := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		out = append(out, piModelID(entry))
 	}
 	return out
 }
