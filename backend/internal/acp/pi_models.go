@@ -23,10 +23,10 @@ const (
 	piModelListTTL = 10 * time.Minute
 )
 
-// piModelsFile is what Jaz keeps in <profile>/models.json. Models names, per
+// piModelsFile is what Jaz keeps in <profile>/models.json. JazModels names, per
 // provider, the models Jaz added: the ones it must keep current from the
-// provider's own list. Everything else in the file is a person's declaration,
-// which Jaz reads and never rewrites.
+// provider's own list. Everything else in the file was declared by a person,
+// and Jaz reads it without rewriting it.
 type piModelsFile struct {
 	Providers map[string]piProviderConfig `json:"providers"`
 	JazModels map[string][]string         `json:"jazModels,omitempty"`
@@ -38,8 +38,9 @@ type piProviderConfig struct {
 	API     string            `json:"api,omitempty"`
 	APIKey  string            `json:"apiKey,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
-	// Models are pi's own model entries. An entry the profile declares, or one
-	// a person declared in their own pi profile, is carried over as it is.
+	// Models are pi's own model entries. One Jaz did not add is carried over as
+	// it is, since pi reads an entry without reasoning as a model that cannot
+	// think and Jaz will not replace what it was told.
 	Models []map[string]any `json:"models,omitempty"`
 }
 
@@ -145,7 +146,7 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 			Headers: resolved.Config.Headers,
 			Models:  piProviderEntries(entries, file.JazModels[resolved.ID], resolved.Config, models),
 		}
-		declared.JazModels[resolved.ID] = piModelIDs(models)
+		declared.JazModels[resolved.ID] = jazModelIDs(entries, file.JazModels[resolved.ID], models)
 	}
 	for id, provider := range declared.Providers {
 		file.Providers[id] = provider
@@ -164,6 +165,29 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 	}
 	sort.Strings(supplied)
 	return supplied, nil
+}
+
+// jazModelIDs is which of the provider's models Jaz owns: the ones it wrote
+// last time, plus the ones it is writing for the first time. An entry already
+// in the file that Jaz did not write is a person's and never becomes Jaz's, so
+// the next refresh cannot rewrite it.
+func jazModelIDs(known []map[string]any, written []string, models []piModel) []string {
+	previously := make(map[string]struct{}, len(known))
+	for _, entry := range known {
+		previously[piModelID(entry)] = struct{}{}
+	}
+	ours := make(map[string]struct{}, len(written))
+	for _, id := range written {
+		ours[id] = struct{}{}
+	}
+	out := make([]string, 0, len(models))
+	for _, model := range models {
+		_, existed := previously[model.ID]
+		if _, wrote := ours[model.ID]; wrote || !existed {
+			out = append(out, model.ID)
+		}
+	}
+	return out
 }
 
 // piProviderEntries is a provider's model list after this refresh. Jaz keeps

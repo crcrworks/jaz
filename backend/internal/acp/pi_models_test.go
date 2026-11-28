@@ -135,9 +135,61 @@ func TestPreparePiProfileKeepsDeclaredModelMetadata(t *testing.T) {
 
 // TestPreparePiProfileRefreshesItsOwnModels pins that the two kinds of entry
 // stay apart. A model Jaz added is rewritten with what the provider says now,
-// so a rename takes effect and a retired model leaves, while a model a person
-// declared keeps the fields they named.
+// so a rename takes effect and a retired model leaves, while an entry Jaz did
+// not add keeps everything declared for it.
 func TestPreparePiProfileRefreshesItsOwnModels(t *testing.T) {
+	clearProviderEnv(t)
+	root := t.TempDir()
+	home := filepath.Join(root, "acp", "pi")
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// A model Jaz never added: a person declared its thinking here.
+	declared := `{"providers":{"commandcode":{"models":[{"id":"flash",` +
+		`"reasoning":true,"cost":{"input":1}}]}}}`
+	if err := os.WriteFile(filepath.Join(home, "models.json"), []byte(declared), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A provider's list is cached per endpoint, so each refresh is served by
+	// its own endpoint: the second answer is what a later refresh must see.
+	listing := func(models []map[string]any) *httptest.Server {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/v1/models" {
+				http.NotFound(w, r)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": models})
+		}))
+		t.Cleanup(server.Close)
+		return server
+	}
+	first := listing([]map[string]any{
+		{"id": "flash", "name": "Flash", "context_length": 1000000},
+		{"id": "retired", "name": "Retired", "context_length": 1000000},
+	})
+	second := listing([]map[string]any{{"id": "flash", "name": "Flash 2", "context_length": 2000000}})
+	for _, base := range []string{first.URL + "/v1", second.URL + "/v1"} {
+		providers := map[string]provider.ModelProviderConfig{
+			"commandcode": {Type: "openai-compatible", BaseURL: base, APIKey: "k"},
+		}
+		if _, err := acp.PreparePiProfile(root, map[string]string{}, providers, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The provider now calls it "Flash 2" with a doubled window, but that entry
+	// is a person's: what they declared about it stays as they declared it.
+	models := piModels2026(t, root)["commandcode"]
+	if len(models) != 1 || models[0]["id"] != "flash" || models[0]["reasoning"] != true {
+		t.Fatalf("declared entry not kept as declared: %+v", models)
+	}
+	if _, ok := models[0]["cost"]; !ok {
+		t.Fatalf("declared entry lost its other fields: %+v", models[0])
+	}
+}
+
+// TestPreparePiProfileRefreshesWhatJazAdded pins the other half: an entry Jaz
+// wrote is the provider's to change.
+func TestPreparePiProfileRefreshesWhatJazAdded(t *testing.T) {
 	clearProviderEnv(t)
 	root := t.TempDir()
 	// A provider's list is cached per endpoint, so each refresh is served by
