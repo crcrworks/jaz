@@ -9,6 +9,8 @@ export interface ModelSelection {
   fastMode?: boolean
 }
 
+// The picker renders a coarse track from the levels the server published; only
+// which of them appear as stops is a UI choice, so the names stay the server's.
 export function pickerEffortOptions(options: ReasoningEffortOption[]): ReasoningEffortOption[] {
   // Max stands in as the top stop for a model that offers it without xhigh.
   const top = options.some((option) => option.value === 'xhigh') ? 'xhigh' : 'max'

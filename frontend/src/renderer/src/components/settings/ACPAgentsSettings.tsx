@@ -442,7 +442,7 @@ function ACPAgentRow({
           <SettingsRow title="Reasoning" description="Reasoning effort copied into new threads.">
             <Select
               value={reasoningEffort}
-              options={withConfiguredEffort(reasoningEffort, reasoningOptions)}
+              options={withConfiguredEffort(reasoningEffort, reasoningOptions, settings.reasoning)}
               disabled={disabled}
               onChange={(reasoning_effort) => update({
                 model: current.model || (reasoning_effort ? defaultModel : '') || '',

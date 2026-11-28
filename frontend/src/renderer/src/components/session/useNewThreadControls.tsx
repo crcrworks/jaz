@@ -46,6 +46,7 @@ export function useNewThreadControls() {
     modelSuggestions,
     modelsLoading,
     reasoningOptions: effortOptions,
+    reasoningLabels,
     effectiveReasoningEffort: effort,
     reasoningStatus,
     reasoningBlocked,
@@ -95,6 +96,7 @@ export function useNewThreadControls() {
     fastMode,
     effort,
     effortOptions,
+    reasoningLabels,
     // The launched config IS the resolved config shown in the UI — same model,
     // provider, and clamped effort — so display and launch cannot diverge.
     sessionConfig: (extra: { directory: string; worktree: boolean; canvas?: boolean }, title?: string): CreateSessionInput => ({
@@ -137,6 +139,7 @@ export function AgentModelControls({
         loading: controls.modelsLoading,
         effort: controls.effort,
         effortOptions: pickerEffortOptions(controls.effortOptions),
+        effortLabels: controls.reasoningLabels,
         effortWhy: controls.reasoningWhy,
         fastMode: controls.fastMode ? { ...controls.fastMode, disabled } : undefined,
       }

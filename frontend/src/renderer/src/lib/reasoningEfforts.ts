@@ -1,45 +1,30 @@
 import type { AgentSettings, ReasoningEffortOption } from './api/types'
 import { modelSuggestionFor, type ModelSuggestion } from './modelSuggestion'
 
-const REASONING_LABELS: Record<string, string> = {
-  '': 'Default',
-  off: 'Off',
-  none: 'None',
-  minimal: 'Minimal',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  xhigh: 'Extra high',
-  max: 'Max',
-  ultra: 'Ultra',
-  ultracode: 'Ultracode',
-}
-
-export const REASONING_EFFORT_OPTIONS: ReasoningEffortOption[] = [
-  { value: '', label: 'Default' },
-  { value: 'minimal', label: 'Minimal' },
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'xhigh', label: 'Extra high' },
-]
-
 function acpReasoningEffortOptions(
   settings: AgentSettings | undefined,
   agent: string,
 ): ReasoningEffortOption[] {
   // An explicit empty list means the agent has no reasoning efforts of its own —
   // e.g. Antigravity, whose levels come with each model. Honor that; only fall
-  // back to a generic list when the agent's options haven't loaded.
-  return settings?.acp_options?.[agent]?.reasoning_efforts ?? REASONING_EFFORT_OPTIONS
+  // back to the vocabulary when the agent's options haven't loaded.
+  return settings?.acp_options?.[agent]?.reasoning_efforts ?? settings?.reasoning ?? []
+}
+
+// effortLabel names a level through the options the caller has, then through the
+// full vocabulary, and only then falls back to the value itself.
+function effortLabel(value: string, options: ReasoningEffortOption[], vocabulary: ReasoningEffortOption[] = []): string {
+  const named = options.find((option) => option.value === value)
+    ?? vocabulary.find((option) => option.value === value)
+  return named?.label ?? (value || 'Default')
 }
 
 export function reasoningEffortLabel(
   value: string | undefined,
   options: ReasoningEffortOption[],
+  vocabulary?: ReasoningEffortOption[],
 ): string {
-  const effort = value ?? ''
-  return options.find((option) => option.value === effort)?.label ?? REASONING_LABELS[effort] ?? (effort || 'Default')
+  return effortLabel(value ?? '', options, vocabulary)
 }
 
 export interface ModelReasoningSelection {
@@ -94,7 +79,7 @@ export function modelReasoningSelection({
     return { options: [], effectiveEffort: '', supported: supportedReasoningEffort(effort, []), status: 'ready', blocked: false, why: NO_LEVELS }
   }
   // A model that reasons on its own has no level to choose.
-  const options = suggestion.reasoning.automatic ? [] : reasoningOptions(suggestion)
+  const options = suggestion.reasoning.automatic ? [] : reasoningOptions(suggestion, agentOptions, settings?.reasoning ?? [])
   // A saved Antigravity id such as gemini-4-neon-high names the level it runs at.
   const named = suggestion.reasoning.efforts?.find((level) => model === `${suggestion.value}-${level}`)
   const wanted = effort || named || ''
@@ -126,17 +111,24 @@ export function supportedReasoningEffort(value: string, options: ReasoningEffort
 export function withConfiguredEffort(
   effort: string,
   options: ReasoningEffortOption[],
+  vocabulary?: ReasoningEffortOption[],
 ): ReasoningEffortOption[] {
   const value = effort.trim()
   if (value === '' || options.some((option) => option.value === value)) return options
-  return [...options, { value, label: reasoningEffortLabel(value, options) }]
+  return [...options, { value, label: reasoningEffortLabel(value, options, vocabulary) }]
 }
 
-function reasoningOptions(suggestion: ModelSuggestion): ReasoningEffortOption[] {
+// reasoningOptions reads a model's own levels through the labels the agent and
+// the vocabulary supply, so a level keeps its own name wherever it is known.
+function reasoningOptions(
+  suggestion: ModelSuggestion,
+  agentOptions: ReasoningEffortOption[],
+  vocabulary: ReasoningEffortOption[],
+): ReasoningEffortOption[] {
   const values = suggestion.reasoning.efforts ?? []
   if (values.length === 0) return []
   return [
     { value: '', label: 'Default' },
-    ...values.map((value): ReasoningEffortOption => ({ value, label: REASONING_LABELS[value] ?? value })),
+    ...values.map((value): ReasoningEffortOption => ({ value, label: effortLabel(value, agentOptions, vocabulary) })),
   ]
 }

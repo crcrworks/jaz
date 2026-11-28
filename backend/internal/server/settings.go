@@ -22,6 +22,7 @@ type agentSettingsResponse struct {
 	ACPAuth    map[string]acpAuthStatusResponse          `json:"acp_auth"`
 	ACPOptions map[string]agentOptionResponse            `json:"acp_options"`
 	Agents     []string                                  `json:"agents"`
+	Reasoning  []acp.ReasoningEffortOption               `json:"reasoning"`
 }
 
 type agentOptionResponse struct {
@@ -107,6 +108,7 @@ func (s *Server) agentSettingsResponse(defaults agentsettings.AgentDefaults) age
 		ACPAuth:    s.acpAgentAuthStatuses(defaults),
 		ACPOptions: s.acpOptions(s.selectableACPAgentCatalog(), agentNames, providers, defaults),
 		Agents:     agentNames,
+		Reasoning:  acp.ReasoningEfforts(),
 	}
 }
 

@@ -9,17 +9,8 @@ import (
 	"strings"
 
 	"github.com/wins/jaz/backend/internal/provider"
+	"github.com/wins/jaz/backend/internal/reasoning"
 )
-
-var openRouterReasoningEfforts = map[string]struct{}{
-	"none":    {},
-	"minimal": {},
-	"low":     {},
-	"medium":  {},
-	"high":    {},
-	"xhigh":   {},
-	"max":     {},
-}
 
 type openRouterModelResponse struct {
 	Data []openRouterModel `json:"data"`
@@ -159,18 +150,18 @@ func perToken(value string) float64 {
 	return parsed
 }
 
-func cleanOpenRouterReasoningEfforts(reasoning *openRouterReasoning) []string {
-	if reasoning == nil {
+func cleanOpenRouterReasoningEfforts(capabilities *openRouterReasoning) []string {
+	if capabilities == nil {
 		return []string{}
 	}
 	out := []string{}
-	for _, effort := range reasoning.SupportedEfforts {
+	for _, effort := range capabilities.SupportedEfforts {
 		effort = strings.ToLower(strings.TrimSpace(effort))
-		if _, ok := openRouterReasoningEfforts[effort]; ok {
+		if _, err := reasoning.NormalizeIn(effort, reasoning.Endpoint); err == nil {
 			out = append(out, effort)
 		}
 	}
-	sortReasoningEfforts(out)
+	reasoning.Sort(out)
 	return out
 }
 

@@ -211,6 +211,7 @@ function LoopPromptCard({
     modelSuggestions,
     modelsLoading,
     reasoningOptions: effortOptions,
+    reasoningLabels,
     effectiveReasoningEffort: reasoningEffort,
     reasoningWhy,
   } = useModelReasoningState({
@@ -265,6 +266,7 @@ function LoopPromptCard({
                 onChange={(next) => set({ model: next.model, reasoningEffort: next.effort })}
                 effort={reasoningEffort}
                 effortOptions={pickerEffortOptions(effortOptions)}
+                effortLabels={reasoningLabels}
                 effortWhy={reasoningWhy}
               />
             ) : null}

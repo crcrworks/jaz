@@ -2,11 +2,11 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	oa "github.com/openai/openai-go/v3"
 	"github.com/wins/jaz/backend/internal/media"
+	"github.com/wins/jaz/backend/internal/reasoning"
 	"github.com/wins/jaz/backend/internal/tools"
 )
 
@@ -76,16 +76,18 @@ type ReloadableProvider interface {
 	APIKeyEnvPath() string
 }
 
+// NormalizeReasoningEffort reads an effort at an OpenAI-compatible endpoint
+// boundary, which takes the graded levels and "none" but none of Jaz's or an
+// agent's own names.
 func NormalizeReasoningEffort(value string) (string, error) {
-	value = strings.ToLower(strings.TrimSpace(value))
-	switch value {
-	case "", "none":
-		return "", nil
-	case "minimal", "low", "medium", "high", "xhigh", "max":
-		return value, nil
-	default:
-		return "", fmt.Errorf("unknown reasoning effort %q; valid values are none, minimal, low, medium, high, xhigh, max", value)
+	effort, err := reasoning.NormalizeIn(value, reasoning.Endpoint)
+	if err != nil {
+		return "", err
 	}
+	if effort == reasoning.None {
+		return "", nil
+	}
+	return effort, nil
 }
 
 func SystemMessage(content string) Message {

@@ -1351,6 +1351,9 @@ export interface AgentSettings {
   acp_keys?: Record<string, string>
   acp_options?: Record<string, ACPAgentOptions>
   agents: string[]
+  // reasoning is the vocabulary the server stores, in display order, so a
+  // picker never offers a level the backend would refuse.
+  reasoning?: ReasoningEffortOption[]
 }
 
 export type AgentSettingsInput = Pick<AgentSettings, 'acp' | 'acp_keys'>

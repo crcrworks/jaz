@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/log"
+	"github.com/wins/jaz/backend/internal/reasoning"
 )
 
 // Shape returned by claude-agent-acp@0.44.0 for session/set_config_option
@@ -247,5 +248,18 @@ func TestOpenCodeDropsAnEffortTheModelDoesNotOffer(t *testing.T) {
 	}
 	if _, _, err := manager.applyConfiguredReasoningEffort(t.Context(), nil, AgentClaude, "session", "model", "xhigh", options, false); err == nil {
 		t.Fatal("claude must still refuse an effort its model does not advertise")
+	}
+}
+
+// The per-agent table names a harness's own spelling, but no agent may offer a
+// level the shared vocabulary cannot store, which is exactly the bug that made a
+// routine refuse a level a picker offered.
+func TestAgentEffortLevelsStayInsideTheVocabulary(t *testing.T) {
+	for agent, levels := range effortLevels {
+		for _, level := range levels {
+			if _, err := reasoning.Normalize(level); err != nil {
+				t.Fatalf("%s offers level %q the vocabulary does not store", agent, level)
+			}
+		}
 	}
 }

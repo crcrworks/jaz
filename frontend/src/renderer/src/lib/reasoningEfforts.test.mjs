@@ -239,8 +239,12 @@ describe('modelReasoningSelection', () => {
 })
 
 describe('withConfiguredEffort', () => {
+  // Labels come from the vocabulary the server sent, so a saved level a model
+  // does not list still reads with its own name.
+  const vocabulary = [{ value: '', label: 'Default' }, { value: 'none', label: 'None' }]
+
   test('keeps a saved effort the current model does not list', () => {
-    expect(withConfiguredEffort('none', [{ value: '', label: 'Default' }])).toEqual([
+    expect(withConfiguredEffort('none', [{ value: '', label: 'Default' }], vocabulary)).toEqual([
       { value: '', label: 'Default' },
       { value: 'none', label: 'None' },
     ])

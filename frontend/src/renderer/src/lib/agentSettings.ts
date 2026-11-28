@@ -9,6 +9,7 @@ export function normalizeAgentSettings(settings: AgentSettings): AgentSettings {
     acp_options: cloneACPOptions(settings.acp_options),
     ...inputFromSettings(settings),
     agents,
+    reasoning: [...(settings.reasoning ?? [])],
   }
 }
 
@@ -94,6 +95,7 @@ export function cloneAgentSettings(settings: AgentSettings): AgentSettings {
       ]),
     ),
     agents: [...(settings.agents ?? [])],
+    reasoning: [...(settings.reasoning ?? [])],
     acp_options: cloneACPOptions(settings.acp_options),
   }
 }

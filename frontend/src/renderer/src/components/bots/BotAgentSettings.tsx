@@ -74,6 +74,7 @@ export function BotAgentSettings({ bot, agentSession, working }: { bot: Bot; age
             effort={reasoning.effectiveReasoningEffort}
             suggestions={reasoning.modelSuggestions}
             effortOptions={pickerEffortOptions(reasoning.reasoningOptions)}
+            effortLabels={reasoning.reasoningLabels}
             effortWhy={reasoning.reasoningWhy}
             loading={reasoning.modelsLoading}
             disabled={disabled}
