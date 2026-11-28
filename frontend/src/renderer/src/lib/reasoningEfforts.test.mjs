@@ -225,11 +225,11 @@ describe('modelReasoningSelection', () => {
     expect(modelReasoningSelection({
       ...input,
       catalog: catalog([{ value: 'gpt-test', label: 'Test', reasoning: { status: 'unavailable' } }]),
-    }).why).toBe('This model has no thinking levels')
+    }).why).toBe('This model does not reason, so it has no thinking levels')
     expect(modelReasoningSelection({
       ...input,
       catalog: catalog([{ value: 'gpt-test', label: 'Test', reasoning: { status: 'ready', efforts: [] } }]),
-    }).why).toBe('This model has no thinking levels')
+    }).why).toBe('This model offers no thinking levels')
     expect(modelReasoningSelection({
       ...input,
       catalog: catalog([{ value: 'gpt-test', label: 'Test', reasoning: { status: 'ready', efforts: ['low', 'high'] } }]),

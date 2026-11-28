@@ -102,6 +102,65 @@ func TestPreparePiProfileSuppliesModelProviders(t *testing.T) {
 	}
 }
 
+// TestPreparePiProfileKeepsDeclaredModelMetadata pins that a model entry the
+// profile already declares keeps its thinking metadata. pi reads a missing
+// reasoning as a model that cannot think, so declaring the provider again with
+// the model list Jaz builds must not drop the levels the profile states for it
+// — a pi thread showed "no thinking levels" for a model pi runs at six because
+// Jaz replaced a declared entry with an entry carrying no reasoning.
+func TestPreparePiProfileKeepsDeclaredModelMetadata(t *testing.T) {
+	clearProviderEnv(t)
+	root := t.TempDir()
+	home := filepath.Join(root, "acp", "pi")
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	declared := `{"providers":{"commandcode":{"models":[{"id":"deepseek/deepseek-v4.1-flash",` +
+		`"reasoning":true,"thinkingLevelMap":{"off":"none","low":"low","max":"max"}}]}}}`
+	if err := os.WriteFile(filepath.Join(home, "models.json"), []byte(declared), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const key = "provider-secret-key"
+	server := piProviderServer(t, key)
+	t.Cleanup(server.Close)
+	providers := map[string]provider.ModelProviderConfig{
+		"commandcode": {Type: "openai-compatible", BaseURL: server.URL + "/v1", APIKey: key, DefaultModel: "deepseek/deepseek-v4.1-flash"},
+	}
+	if _, err := acp.PreparePiProfile(root, map[string]string{}, providers, "commandcode/deepseek/deepseek-v4.1-flash"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(home, "models.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Providers map[string]struct {
+			Models []struct {
+				ID               string         `json:"id"`
+				Reasoning        *bool          `json:"reasoning"`
+				ThinkingLevelMap map[string]any `json:"thinkingLevelMap"`
+			} `json:"models"`
+		} `json:"providers"`
+	}
+	if err := json.Unmarshal(data, &file); err != nil {
+		t.Fatal(err)
+	}
+	models := file.Providers["commandcode"].Models
+	if len(models) < 2 {
+		t.Fatalf("models not declared by Jaz: %s", data)
+	}
+	for _, model := range models {
+		if model.ID != "deepseek/deepseek-v4.1-flash" {
+			continue
+		}
+		if model.Reasoning == nil || !*model.Reasoning || model.ThinkingLevelMap["max"] != "max" {
+			t.Fatalf("declared metadata lost: %+v", model)
+		}
+		return
+	}
+	t.Fatalf("model not declared: %s", data)
+}
+
 // TestPreparePiProfileDeclaresProviderWithoutKey pins that a provider Jaz has
 // no key for is still declared: pi's own `auth login` for that provider needs
 // the declaration, and a stored pi credential outranks models.json.

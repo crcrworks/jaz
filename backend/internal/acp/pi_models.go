@@ -33,10 +33,14 @@ type piProviderConfig struct {
 	API     string            `json:"api,omitempty"`
 	APIKey  string            `json:"apiKey,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
-	Models  []piModelConfig   `json:"models,omitempty"`
+	// Models are pi's own model entries. An entry the profile already declares
+	// is carried over verbatim, so nothing written there is lost.
+	Models []any `json:"models,omitempty"`
 }
 
-type piModelConfig struct {
+// piModel is the model entry Jaz adds itself: what pi shows for a model it is
+// told about, and nothing else — thinking metadata is the profile's own word.
+type piModel struct {
 	ID            string `json:"id"`
 	Name          string `json:"name,omitempty"`
 	ContextWindow int    `json:"contextWindow,omitempty"`
@@ -56,7 +60,13 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 		return nil, fmt.Errorf("prepare pi profile %s: %w", home, err)
 	}
 	selectedProvider, _ := modelprovider.SplitProviderModel(model)
+	path := filepath.Join(home, "models.json")
+	current, readErr := os.ReadFile(path)
 	file := piModelsFile{Providers: map[string]piProviderConfig{}}
+	if readErr == nil {
+		_ = json.Unmarshal(current, &file)
+	}
+	declared := piModelsFile{Providers: map[string]piProviderConfig{}}
 	supplied := []string{}
 	for _, resolved := range modelprovider.ResolveModelProviders(providers) {
 		keyEnv := modelprovider.ConfiguredAPIKeyEnv(resolved.ID, resolved.Config)
@@ -96,22 +106,24 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 			// not authenticate ignores the dummy value pi documents.
 			apiKey = "none"
 		}
-		file.Providers[resolved.ID] = piProviderConfig{
+		declared.Providers[resolved.ID] = piProviderConfig{
 			Name:    firstNonEmpty(resolved.Config.Label, resolved.Meta.Label),
 			BaseURL: baseURL,
 			API:     piProviderAPI,
 			APIKey:  apiKey,
 			Headers: resolved.Config.Headers,
-			Models:  models,
+			Models:  withDeclaredModels(file.Providers[resolved.ID].Models, models),
 		}
 	}
-	if len(file.Providers) > 0 {
+	for id, provider := range declared.Providers {
+		file.Providers[id] = provider
+	}
+	if len(declared.Providers) > 0 {
 		data, err := json.MarshalIndent(file, "", "  ")
 		if err != nil {
 			return nil, err
 		}
-		path := filepath.Join(home, "models.json")
-		if current, err := os.ReadFile(path); err != nil || !bytes.Equal(current, data) {
+		if readErr != nil || !bytes.Equal(current, data) {
 			if err := os.WriteFile(path, data, 0o600); err != nil {
 				return nil, fmt.Errorf("write pi models %s: %w", path, err)
 			}
@@ -121,16 +133,43 @@ func PreparePiProfile(root string, env map[string]string, providers map[string]m
 	return supplied, nil
 }
 
+// withDeclaredModels keeps what the profile already says about a model Jaz is
+// declaring. pi reads an entry without reasoning as a model that cannot think,
+// so replacing one with the id and context window Jaz knows turned a model pi
+// runs at six levels into one it runs at none.
+func withDeclaredModels(kept []any, declared []any) []any {
+	byID := make(map[string]any, len(kept))
+	for _, entry := range kept {
+		var model piModel
+		raw, err := json.Marshal(entry)
+		if err == nil && json.Unmarshal(raw, &model) == nil && model.ID != "" {
+			byID[model.ID] = entry
+		}
+	}
+	out := make([]any, 0, len(declared))
+	for _, entry := range declared {
+		var model piModel
+		raw, err := json.Marshal(entry)
+		if err == nil && json.Unmarshal(raw, &model) == nil {
+			if known, ok := byID[model.ID]; ok {
+				entry = known
+			}
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
 // piProviderModels is the model list pi may run for a provider Jaz supplies:
 // what the provider advertises plus its default and the thread's selection, in
 // pi's provider-relative id. pi refuses a model its catalog does not list.
-func piProviderModels(source piModelSource, defaultModel, selectedProvider, selected string) []piModelConfig {
+func piProviderModels(source piModelSource, defaultModel, selectedProvider, selected string) []any {
 	ids := []string{strings.TrimSpace(defaultModel)}
 	if selectedProvider == source.Provider {
 		_, id := modelprovider.SplitProviderModel(selected)
 		ids = append(ids, id)
 	}
-	var models []piModelConfig
+	var models []piModel
 	if source.Key != "" {
 		models = piListModels(source)
 	}
@@ -141,10 +180,14 @@ func piProviderModels(source piModelSource, defaultModel, selectedProvider, sele
 	for _, id := range ids {
 		if id != "" && !seen[id] {
 			seen[id] = true
-			models = append(models, piModelConfig{ID: id, Name: id})
+			models = append(models, piModel{ID: id, Name: id})
 		}
 	}
-	return models
+	out := make([]any, 0, len(models))
+	for _, model := range models {
+		out = append(out, model)
+	}
+	return out
 }
 
 // piModelSource is the endpoint a provider's model list comes from, and the key
@@ -165,14 +208,14 @@ var piModelLists = struct {
 }{byProvider: map[string]piModelList{}}
 
 type piModelList struct {
-	models  []piModelConfig
+	models  []piModel
 	fetched time.Time
 }
 
 // piListModels asks an OpenAI-compatible provider which models it serves. Auth
 // probes run this on every Settings read, so a fresh answer is reused; a stale
 // one is returned only when the provider cannot be reached now.
-func piListModels(source piModelSource) []piModelConfig {
+func piListModels(source piModelSource) []piModel {
 	key := source.cacheKey()
 	piModelLists.Lock()
 	cached, ok := piModelLists.byProvider[key]
@@ -192,7 +235,7 @@ func piListModels(source piModelSource) []piModelConfig {
 	return models
 }
 
-func fetchPiModelList(source piModelSource) []piModelConfig {
+func fetchPiModelList(source piModelSource) []piModel {
 	endpoint, err := modelprovider.ModelsURL(source.BaseURL)
 	if err != nil {
 		return nil
@@ -222,12 +265,12 @@ func fetchPiModelList(source piModelSource) []piModelConfig {
 	if res.StatusCode != http.StatusOK || json.NewDecoder(res.Body).Decode(&body) != nil {
 		return nil
 	}
-	models := []piModelConfig{}
+	models := []piModel{}
 	for _, entry := range body.Data {
 		if entry.ID == "" || (len(entry.SupportedEndpoints) > 0 && !slices.Contains(entry.SupportedEndpoints, "/chat/completions")) {
 			continue
 		}
-		models = append(models, piModelConfig{ID: entry.ID, Name: firstNonEmpty(entry.Name, entry.ID), ContextWindow: entry.ContextLength})
+		models = append(models, piModel{ID: entry.ID, Name: firstNonEmpty(entry.Name, entry.ID), ContextWindow: entry.ContextLength})
 	}
 	return models
 }
