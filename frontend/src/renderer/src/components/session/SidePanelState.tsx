@@ -10,7 +10,7 @@ import { entrypointKey, fileEntrypoint, mcpEntrypointsQuery } from '@/lib/api/mc
 import { previewDisplayUrl } from '@/lib/api/preview'
 import { openedFile } from '@/lib/mcpAppFiles'
 import { useBrowserSessions, useSessionPreview } from '@/lib/browserSessions'
-import { SidebarVisibility } from '@/lib/sidebar'
+import { DismissSidebarDrawer } from '@/lib/sidebar'
 import type { PluginView } from '@/lib/api/types'
 import type { MCPAppThread } from '@/lib/mcpAppThread'
 import { OVERVIEW_PANEL_WIDTH, sidePanelTabs, pluginViewTab, refreshPluginTabs, type NewSidePanelTab, type PanelPresentation, type SidePanelMode, type SidePanelTab, type SidePanelTabs } from '@/lib/sidePanelTabs'
@@ -45,7 +45,7 @@ export function useSidePanelState(sessionId: string, { sideChatAvailable = false
   const saved = panels.get(sessionId)
   const initialPanel = useRef(saved)
   const restoredViews = useRef(false)
-  const setSidebarOpen = useContext(SidebarVisibility)
+  const closeSidebarDrawer = useContext(DismissSidebarDrawer)
   const browsers = useBrowserSessions()
   const entrypoints = useQuery(mcpEntrypointsQuery).data
   const [state, dispatch] = useReducer(sidePanelTabs, undefined, () => {
@@ -94,10 +94,10 @@ export function useSidePanelState(sessionId: string, { sideChatAvailable = false
   }, [panels, sessionId, state, open, mode, widthOverride])
 
   const showTabs = useCallback(() => {
-    setSidebarOpen?.(false)
+    closeSidebarDrawer?.()
     setMode('tabs')
     setOpen(true)
-  }, [setSidebarOpen])
+  }, [closeSidebarDrawer])
   useEffect(() => {
     if (!pluginViews || restoredViews.current) return
     restoredViews.current = true
