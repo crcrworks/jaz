@@ -116,6 +116,44 @@ func (q *Queries) ListBots(ctx context.Context) ([]Bot, error) {
 	return items, nil
 }
 
+const listBusyBots = `-- name: ListBusyBots :many
+SELECT DISTINCT bots.thread_id
+FROM threads
+JOIN bots ON bots.thread_id = CASE
+  WHEN threads.source_type IN ('bot_worker', 'bot_member') THEN threads.source_id
+  WHEN threads.source_type = 'loop_run' THEN COALESCE(threads.parent_id, '')
+  ELSE threads.id
+END
+WHERE threads.status = 'running' AND threads.archived = 0
+`
+
+// The bots with a thread of their work running, read from the tagging a thread
+// carries: a bot's own thread, a subtask or group seat that names it, or a
+// routine run in a thread of its own. A memory worker names no bot, and a
+// thread a restart left interrupted is not running.
+func (q *Queries) ListBusyBots(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listBusyBots)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var thread_id string
+		if err := rows.Scan(&thread_id); err != nil {
+			return nil, err
+		}
+		items = append(items, thread_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMemberships = `-- name: ListMemberships :many
 SELECT group_id, bot_id, thread_id, seen
 FROM bot_memberships

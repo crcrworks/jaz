@@ -69,10 +69,14 @@ func (s *Service) List() ([]Bot, error) {
 	if err != nil {
 		return nil, err
 	}
+	busy, err := s.store.BusyBots()
+	if err != nil {
+		return nil, err
+	}
 	out := make([]Bot, 0, len(sessions))
 	for _, session := range sessions {
 		if record, ok := byThread[session.ID]; ok {
-			out = append(out, s.view(record, session, held))
+			out = append(out, s.view(record, session, held, busy[session.ID]))
 		}
 	}
 	return out, nil
@@ -87,7 +91,11 @@ func (s *Service) Load(id string) (Bot, error) {
 	if err != nil {
 		return Bot{}, err
 	}
-	return s.view(record, session, held), nil
+	busy, err := s.store.BusyBots()
+	if err != nil {
+		return Bot{}, err
+	}
+	return s.view(record, session, held, busy[id]), nil
 }
 
 func (s *Service) Create(ctx context.Context, input CreateBot) (Bot, error) {
@@ -471,8 +479,8 @@ func isBot(store PromptStore, id string) bool {
 }
 
 // view is a bot as the API shows it; held names the bots whose routines wait
-// for the user.
-func (s *Service) view(record storage.BotRecord, session storage.Session, held map[string]bool) Bot {
+// for the user, and busy whether a thread of its work runs.
+func (s *Service) view(record storage.BotRecord, session storage.Session, held map[string]bool, busy bool) Bot {
 	bot := Bot{
 		ID:          session.ID,
 		Kind:        record.Kind,
@@ -485,6 +493,7 @@ func (s *Service) view(record storage.BotRecord, session storage.Session, held m
 		Main:        record.Main,
 		Unread:      session.Unread,
 		Status:      session.Status,
+		Busy:        busy,
 		CreatedAt:   session.CreatedAt,
 		CompletedAt: session.CompletedAt,
 		UpdatedAt:   session.UpdatedAt,

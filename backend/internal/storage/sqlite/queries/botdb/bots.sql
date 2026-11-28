@@ -21,6 +21,20 @@ LIMIT 1;
 SELECT thread_id, kind, shape, color, members, pinned, prompt, main, workspaces, plugins
 FROM bots;
 
+-- name: ListBusyBots :many
+-- The bots with a thread of their work running, read from the tagging a thread
+-- carries: a bot's own thread, a subtask or group seat that names it, or a
+-- routine run in a thread of its own. A memory worker names no bot, and a
+-- thread a restart left interrupted is not running.
+SELECT DISTINCT bots.thread_id
+FROM threads
+JOIN bots ON bots.thread_id = CASE
+  WHEN threads.source_type IN ('bot_worker', 'bot_member') THEN threads.source_id
+  WHEN threads.source_type = 'loop_run' THEN COALESCE(threads.parent_id, '')
+  ELSE threads.id
+END
+WHERE threads.status = 'running' AND threads.archived = 0;
+
 -- name: UnpinBots :exec
 UPDATE bots SET pinned = 0;
 

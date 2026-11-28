@@ -21,23 +21,32 @@ import (
 	sqlitestore "github.com/wins/jaz/backend/internal/storage/sqlite"
 )
 
-func TestBotStreamSnapshotsAndPublishesChangesAcrossThreads(t *testing.T) {
+// botStream is the bots SSE endpoint with its handler's own service, store and
+// bus, and next reads the next event it sends.
+type botStream struct {
+	store   *sqlitestore.Store
+	service *botcore.Service
+	bus     *sessionevents.Bus
+	next    func(kind string, into any)
+}
+
+func openBotStream(t *testing.T) botStream {
+	t.Helper()
 	root := t.TempDir()
 	store, err := sqlitestore.New(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store.Close()
+	t.Cleanup(func() { _ = store.Close() })
 	logger := log.New(io.Discard)
 	bus := sessionevents.New()
 	manager := acp.NewManager(store, acp.Config{Root: root, Agents: map[string]acp.AgentConfig{"fixture": {Command: "unused"}}}, logger)
-	defer manager.Close()
+	t.Cleanup(manager.Close)
 	service := botcore.NewService(store, filepath.Join(root, "bots"), manager, nil, nil, loops.NewService(store, nil, logger), bus, logger)
-	handler := NewHandler(service, bus)
-	httpServer := httptest.NewServer(http.HandlerFunc(handler.Events))
-	defer httpServer.Close()
+	httpServer := httptest.NewServer(http.HandlerFunc(NewHandler(service, bus).Events))
+	t.Cleanup(httpServer.Close)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 	request, err := http.NewRequestWithContext(ctx, "GET", httpServer.URL, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -46,7 +55,7 @@ func TestBotStreamSnapshotsAndPublishesChangesAcrossThreads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer response.Body.Close()
+	t.Cleanup(func() { _ = response.Body.Close() })
 	scanner := bufio.NewScanner(response.Body)
 	next := func(kind string, into any) {
 		t.Helper()
@@ -60,12 +69,18 @@ func TestBotStreamSnapshotsAndPublishesChangesAcrossThreads(t *testing.T) {
 			t.Fatal("missing event boundary")
 		}
 	}
+	return botStream{store: store, service: service, bus: bus, next: next}
+}
+
+func TestBotStreamSnapshotsAndPublishesChangesAcrossThreads(t *testing.T) {
+	stream := openBotStream(t)
+	store, service, bus, next := stream.store, stream.service, stream.bus, stream.next
 	var initial listResponse
 	next("snapshot", &initial)
 	if len(initial.Bots) != 0 {
 		t.Fatalf("initial = %+v", initial)
 	}
-	bot, err := service.Create(ctx, botcore.CreateBot{Name: "Research"})
+	bot, err := service.Create(t.Context(), botcore.CreateBot{Name: "Research"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +112,7 @@ func TestBotStreamSnapshotsAndPublishesChangesAcrossThreads(t *testing.T) {
 	if changed.ID != bot.ID {
 		t.Fatalf("worker question refreshed %s, want %s", changed.ID, bot.ID)
 	}
-	peer, err := service.Create(ctx, botcore.CreateBot{Name: "Reviewer"})
+	peer, err := service.Create(t.Context(), botcore.CreateBot{Name: "Reviewer"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,5 +165,46 @@ func TestBotStreamSnapshotsAndPublishesChangesAcrossThreads(t *testing.T) {
 	next("removed", &removed)
 	if removed != bot.ID {
 		t.Fatalf("removed = %q", removed)
+	}
+}
+
+// A child thread's turn starting and finishing changes its bot's one row, so
+// its list entry animates and stops without a snapshot in between.
+func TestBotStreamCarriesAChildTurnsStartAndFinish(t *testing.T) {
+	stream := openBotStream(t)
+	store, service, bus, next := stream.store, stream.service, stream.bus, stream.next
+	var snapshot listResponse
+	next("snapshot", &snapshot)
+	bot, err := service.Create(t.Context(), botcore.CreateBot{Name: "Research"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var created botcore.Bot
+	next("changed", &created)
+	worker, err := store.CreateSession(storage.CreateSession{Slug: "worker", ParentID: bot.ID, SourceType: storage.SourceBotWorker, SourceID: bot.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, turn := range []struct {
+		start bool
+		busy  bool
+		kind  string
+	}{{true, true, "acp"}, {false, false, sessionevents.TypeSession}} {
+		if turn.start {
+			err = store.StartSessionTurn(worker.ID, storage.Turn{StartedAt: time.Now()})
+		} else {
+			err = store.FinishSessionTurn(worker.ID, storage.StatusIdle, "", time.Now().UTC(), nil)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A turn's start announces it in the thread it runs in, and its finish
+		// reacts as the server does.
+		bus.Publish(sessionevents.Event{SessionID: worker.ID, Type: turn.kind})
+		var changed botcore.Bot
+		next("changed", &changed)
+		if changed.ID != bot.ID || changed.Busy != turn.busy {
+			t.Fatalf("after start=%v changed = %+v, want bot %s busy %v", turn.start, changed, bot.ID, turn.busy)
+		}
 	}
 }
